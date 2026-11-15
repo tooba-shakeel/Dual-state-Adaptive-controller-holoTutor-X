@@ -71,31 +71,44 @@ class ChatService:
         self._top_k = top_k
 
     async def chat_stream(
-        self, request: ChatRequest
+        self,
+        request: ChatRequest,
+        user_id: int | None = None,
+        allowed_document_ids: list[str] | None = None,
     ) -> typing.AsyncGenerator[tuple[str, list[Citation], dict[str, typing.Any] | None], None]:
         """
         Executes the pipeline and yields ``(text, citations, meta)``.
         The very first yield carries the citations and ``meta`` = conversation id + Tutor State,
         so the frontend can show the sources and the Tutor State panel.
         Subsequent yields only contain text chunks.
+
+        ``user_id`` owns any new conversation. ``allowed_document_ids`` limits the search
+        to the student's own documents (None = no limit, used by tests and scripts).
         """
         # 1. Retrieve or create conversation
+        conv = None
         if request.conversation_id:
             conv = await self._conversation_store.get_conversation(request.conversation_id)
-            if not conv:
-                conv = await self._conversation_store.create_conversation()
-        else:
-            conv = await self._conversation_store.create_conversation()
+            if conv is not None and user_id is not None and conv.user_id != user_id:
+                conv = None  # never continue another user's conversation
+        if conv is None:
+            conv = await self._conversation_store.create_conversation(user_id=user_id)
 
         history = conv.messages[-10:] if conv else [] # Keep last 10 messages for context
 
         # 2. Retrieve context (a follow-up is searched with the question it refers to)
         search_query = self._search_query(request.message, history)
-        citations = await self._retriever.retrieve(
-            query=search_query,
-            top_k=self._top_k,
-            document_ids=request.document_ids,
-        )
+        document_ids = request.document_ids
+        if allowed_document_ids is not None:
+            document_ids = [d for d in (document_ids or allowed_document_ids) if d in allowed_document_ids]
+        if allowed_document_ids is not None and not document_ids:
+            citations = []  # the student has no ready document: nothing to search
+        else:
+            citations = await self._retriever.retrieve(
+                query=search_query,
+                top_k=self._top_k,
+                document_ids=document_ids,
+            )
 
         # 3. Dual-State decision: evidence (ECA) + learner (LSE) -> action (DSC)
         evidence_state, evidence_score = await self._evidence.assess(search_query, citations)

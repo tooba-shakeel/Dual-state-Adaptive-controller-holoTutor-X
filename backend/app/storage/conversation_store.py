@@ -50,6 +50,11 @@ class SQLiteConversationStore(ConversationStore):
     async def initialize(self) -> None:
         async with aiosqlite.connect(self._db_path) as db:
             await db.executescript(_CREATE_TABLES_SQL)
+            # Owner of the conversation (SRS 3.2.8: a student sees only their own sessions)
+            try:
+                await db.execute("ALTER TABLE conversations ADD COLUMN user_id INTEGER")
+            except aiosqlite.OperationalError:
+                pass
             await db.commit()
         logger.info("SQLite conversation store initialized.")
 
@@ -57,16 +62,18 @@ class SQLiteConversationStore(ConversationStore):
     # Conversations
     # ------------------------------------------------------------------
 
-    async def create_conversation(self, title: str = "New Conversation") -> Conversation:
+    async def create_conversation(
+        self, title: str = "New Conversation", user_id: int | None = None
+    ) -> Conversation:
         now_str = datetime.now(timezone.utc).isoformat()
-        conv = Conversation(title=title)
+        conv = Conversation(title=title, user_id=user_id)
         conv.created_at = datetime.fromisoformat(now_str)
         conv.updated_at = datetime.fromisoformat(now_str)
 
         async with aiosqlite.connect(self._db_path) as db:
             await db.execute(
-                "INSERT INTO conversations (id, title, created_at, updated_at) VALUES (?, ?, ?, ?)",
-                (conv.id, conv.title, now_str, now_str),
+                "INSERT INTO conversations (id, title, created_at, updated_at, user_id) VALUES (?, ?, ?, ?, ?)",
+                (conv.id, conv.title, now_str, now_str, user_id),
             )
             await db.commit()
         return conv
@@ -93,21 +100,23 @@ class SQLiteConversationStore(ConversationStore):
             created_at=datetime.fromisoformat(row["created_at"]),
             updated_at=datetime.fromisoformat(row["updated_at"]),
             messages=messages,
+            user_id=row["user_id"],
         )
 
     async def list_conversations(
-        self, limit: int = 50, offset: int = 0
+        self, limit: int = 50, offset: int = 0, user_id: int | None = None
     ) -> tuple[list[Conversation], int]:
+        where, params = ("WHERE user_id = ?", (user_id,)) if user_id is not None else ("", ())
         async with aiosqlite.connect(self._db_path) as db:
             db.row_factory = aiosqlite.Row
 
-            cursor = await db.execute("SELECT COUNT(*) as cnt FROM conversations")
+            cursor = await db.execute(f"SELECT COUNT(*) as cnt FROM conversations {where}", params)
             total_row = await cursor.fetchone()
             total = total_row["cnt"] if total_row else 0
 
             cursor = await db.execute(
-                "SELECT * FROM conversations ORDER BY updated_at DESC LIMIT ? OFFSET ?",
-                (limit, offset),
+                f"SELECT * FROM conversations {where} ORDER BY updated_at DESC LIMIT ? OFFSET ?",
+                (*params, limit, offset),
             )
             rows = await cursor.fetchall()
 
@@ -117,6 +126,7 @@ class SQLiteConversationStore(ConversationStore):
                 title=r["title"],
                 created_at=datetime.fromisoformat(r["created_at"]),
                 updated_at=datetime.fromisoformat(r["updated_at"]),
+                user_id=r["user_id"],
             )
             for r in rows
         ]

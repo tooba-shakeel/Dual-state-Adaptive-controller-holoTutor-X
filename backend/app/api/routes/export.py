@@ -9,8 +9,10 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 
+from app.api.routes.auth import current_user
+from app.api.routes.chat import owned_conversation
 from app.core.models import InsightType
-from app.dependencies import get_insights_service, get_conversation_store
+from app.dependencies import get_insights_service, get_conversation_store, get_document_service
 
 try:
     from reportlab.lib.pagesizes import letter
@@ -90,9 +92,11 @@ def _generate_excel(content: str) -> io.BytesIO:
 async def export_insights(
     document_id: str,
     format: str,
+    user: dict = Depends(current_user),
     insight_service = Depends(get_insights_service)
 ):
-    """Export all generated insights for a document."""
+    """Export all generated insights for a document (own documents only)."""
+    await get_document_service().get_document(document_id, user_id=user["id"])
     # We will generate/fetch all insights to compile a full report
     insight_types = list(InsightType)
     full_report = f"Insights Report for Document: {document_id}\n\n"
@@ -129,13 +133,12 @@ async def export_insights(
 @router.get("/chat/{conversation_id}/txt")
 async def export_chat(
     conversation_id: str,
+    user: dict = Depends(current_user),
     store = Depends(get_conversation_store)
 ):
-    """Export chat history as text."""
-    conv = await store.get_conversation(conversation_id)
-    if not conv:
-        raise HTTPException(status_code=404, detail="Conversation not found")
-        
+    """Export chat history as text (own conversations only)."""
+    conv = await owned_conversation(conversation_id, user, store)
+
     content = f"Conversation: {conv.title}\n\n"
     for msg in conv.messages:
         content += f"[{msg.role.upper()}]: {msg.content}\n\n"

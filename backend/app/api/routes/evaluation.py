@@ -13,7 +13,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
-from app.api.routes.auth import require_roles
+from app.api.routes.auth import current_user, require_roles
 from app.config import settings
 from app.dependencies import get_evaluation_manager
 from app.services.auth_service import ADMINISTRATOR, EVALUATOR
@@ -67,10 +67,15 @@ async def question_info(manager: EvaluationManager = Depends(get_evaluation_mana
 
 @router.post("/run", status_code=202)
 async def start_run(
-    body: RunRequest, manager: EvaluationManager = Depends(get_evaluation_manager)
+    body: RunRequest,
+    user: dict[str, Any] = Depends(current_user),
+    manager: EvaluationManager = Depends(get_evaluation_manager),
 ) -> dict[str, Any]:
+    """Run over the evaluator's own uploaded documents."""
     try:
-        return await manager.start(body.versions, body.delay, body.document_ids, body.fresh)
+        return await manager.start(
+            body.versions, body.delay, body.document_ids, body.fresh, owner_id=user["id"]
+        )
     except EvaluationBusyError as exc:
         raise HTTPException(status_code=409, detail=str(exc))
     except (ValueError, QuestionFileError) as exc:
