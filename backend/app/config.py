@@ -101,5 +101,8 @@ class Settings(BaseSettings):
     ADMIN_EMAIL: str = ""
     ADMIN_PASSWORD: str = ""
 
+    # ── Evaluation mode (SRS 3.2.9) ──────────────────────────────────────
+    EVALUATION_DELAY_SECONDS: float = 5.0  # minimum gap between AI calls during a run
+
 # Singleton — import this everywhere instead of constructing a new instance.
 settings = Settings()

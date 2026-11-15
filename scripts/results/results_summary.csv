@@ -1,5 +1,0 @@
-﻿version,questions,answerable,unanswerable,unsupported_answers,unsupported_rate,correct_refusals,correct_refusal_rate,wrong_refusals,wrong_refusal_rate,clarifying_questions,source_page_matches,source_match_rate,avg_response_time_s,errors
-Full tutor,30,20,10,0,0%,10,100%,1,5%,5,14/14,100%,8.59,0
-Baseline A: normal RAG,30,20,10,0,0%,10,100%,0,0%,0,20/20,100%,6.66,0
-Baseline B: learner state only,30,20,10,0,0%,10,100%,0,0%,0,20/20,100%,4.89,0
-Baseline C: evidence confidence only,30,20,10,0,0%,10,100%,1,5%,1,18/18,100%,10.48,0
