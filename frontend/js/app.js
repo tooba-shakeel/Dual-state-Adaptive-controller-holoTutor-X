@@ -19,6 +19,8 @@ const App = (() => {
 
         // Administration screen (only for administrators; SRS 3.2.1)
         if (typeof Admin !== 'undefined') Admin.init();
+        // Logs / Unanswered screen (only for administrators; SRS LOG module)
+        if (typeof Logs !== 'undefined') Logs.init();
 
         _initTabs();
 
