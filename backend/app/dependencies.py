@@ -34,6 +34,7 @@ from app.storage.user_store import SQLiteUserStore
 from app.services.auth_service import AuthService
 from app.services.evaluation import EvaluationManager
 from app.storage.interaction_log_store import SQLiteInteractionLogStore
+from app.services.tutor_settings import TutorSettingsService
 
 logger = logging.getLogger(__name__)
 
@@ -49,13 +50,14 @@ _insights_service: InsightsService | None = None
 _auth_service: AuthService | None = None
 _evaluation_manager: EvaluationManager | None = None
 _interaction_log: SQLiteInteractionLogStore | None = None
+_tutor_settings: TutorSettingsService | None = None
 
 
 async def startup() -> None:
     """Initialise all singletons.  Called once from ``main.py``."""
     global _metadata_store, _vector_store, _embedder, _document_service
     global _conversation_store, _llm_provider, _chat_service, _insights_service
-    global _auth_service, _evaluation_manager, _interaction_log
+    global _auth_service, _evaluation_manager, _interaction_log, _tutor_settings
 
     logger.info("Initialising services …")
 
@@ -134,6 +136,16 @@ async def startup() -> None:
         strong_limit=settings.STRONG_LIMIT,
     )
     decision_controller = DecisionController.from_file(settings.DECISION_TABLE_PATH)
+
+    # Tutor Settings: the administrator's saved limits and table replace the defaults above
+    _tutor_settings = TutorSettingsService(
+        Path(settings.DATA_DIR) / "tutor_settings.json",
+        evidence_assessor,
+        decision_controller,
+        default_limits=(settings.PARTIAL_LIMIT, settings.STRONG_LIMIT),
+        default_cells=decision_controller.cells,
+    )
+    _tutor_settings.load()
        # LSE: learner state from the student's last 3 rating signals (SRS 3.2.4)
     learner_estimator = LearnerStateEstimator(SQLiteSignalStore(str(settings.metadata_db_path)))
 
@@ -186,6 +198,11 @@ def get_auth_service() -> AuthService:
 def get_evaluation_manager() -> EvaluationManager:
     assert _evaluation_manager is not None, "Evaluation manager not initialised"
     return _evaluation_manager
+
+
+def get_tutor_settings() -> TutorSettingsService:
+    assert _tutor_settings is not None, "Tutor settings not initialised"
+    return _tutor_settings
 
 
 def get_interaction_log() -> SQLiteInteractionLogStore:

@@ -87,10 +87,12 @@ def create_app() -> FastAPI:
     from app.api.routes.auth import router as auth_router
     from app.api.routes.evaluation import router as evaluation_router
     from app.api.routes.logs import router as logs_router
+    from app.api.routes.tutor_settings import router as tutor_settings_router
 
     app.include_router(auth_router)
     app.include_router(evaluation_router)
     app.include_router(logs_router)
+    app.include_router(tutor_settings_router)
 
    
     app.include_router(feedback.router)
