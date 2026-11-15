@@ -84,6 +84,9 @@ def create_app() -> FastAPI:
     from app.api.routes.chat import router as chat_router
     from app.api.routes.export import router as export_router
     from app.api.routes import feedback
+    from app.api.routes.auth import router as auth_router
+
+    app.include_router(auth_router)
 
    
     app.include_router(feedback.router)

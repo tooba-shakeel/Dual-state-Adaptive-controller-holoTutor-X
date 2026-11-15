@@ -11,9 +11,13 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
 from app.core.exceptions import (
+    AccountLockedError,
     AppError,
+    AuthenticationError,
+    ConflictError,
     DocumentNotFoundError,
     ExtractionError,
+    PermissionDeniedError,
     ProcessingError,
     StorageError,
     ValidationError,
@@ -29,6 +33,10 @@ _STATUS_MAP: dict[type, int] = {
     ExtractionError: 500,
     StorageError: 500,
     ProcessingError: 500,
+    AuthenticationError: 401,
+    PermissionDeniedError: 403,
+    ConflictError: 409,
+    AccountLockedError: 423,
 }
 
 

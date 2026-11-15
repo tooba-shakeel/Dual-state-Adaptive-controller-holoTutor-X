@@ -29,6 +29,8 @@ from app.services.evidence_assessor import EvidenceAssessor
 from app.services.decision_controller import DecisionController
 from app.services.learner_state import LearnerStateEstimator
 from app.storage.signal_store import SQLiteSignalStore
+from app.storage.user_store import SQLiteUserStore
+from app.services.auth_service import AuthService
 
 logger = logging.getLogger(__name__)
 
@@ -41,18 +43,35 @@ _conversation_store: SQLiteConversationStore | None = None
 _llm_provider: OpenAILLMProvider | None = None
 _chat_service: ChatService | None = None
 _insights_service: InsightsService | None = None
+_auth_service: AuthService | None = None
 
 
 async def startup() -> None:
     """Initialise all singletons.  Called once from ``main.py``."""
     global _metadata_store, _vector_store, _embedder, _document_service
     global _conversation_store, _llm_provider, _chat_service, _insights_service
+    global _auth_service
 
     logger.info("Initialising services …")
 
     # Storage
     _metadata_store = SQLiteMetadataStore(str(settings.metadata_db_path))
     await _metadata_store.initialize()
+
+    # Accounts (UAM)
+    user_store = SQLiteUserStore(str(settings.metadata_db_path))
+    await user_store.initialize()
+    _auth_service = AuthService(
+        user_store,
+        token_idle_minutes=settings.TOKEN_IDLE_MINUTES,
+        max_failed_logins=settings.MAX_FAILED_LOGINS,
+        failed_login_window_minutes=settings.FAILED_LOGIN_WINDOW_MINUTES,
+        lock_minutes=settings.LOCK_MINUTES,
+        password_min_length=settings.PASSWORD_MIN_LENGTH,
+    )
+    await _auth_service.ensure_administrator(
+        settings.ADMIN_NAME, settings.ADMIN_EMAIL, settings.ADMIN_PASSWORD
+    )
 
     _conversation_store = SQLiteConversationStore(str(settings.metadata_db_path))
     await _conversation_store.initialize()
@@ -140,6 +159,11 @@ async def shutdown() -> None:
 
 
 # ── Getters (used by routes) ─────────────────────────────────────────
+
+def get_auth_service() -> AuthService:
+    assert _auth_service is not None, "Auth service not initialised"
+    return _auth_service
+
 
 def get_metadata_store() -> SQLiteMetadataStore:
     assert _metadata_store is not None, "Metadata store not initialised"
