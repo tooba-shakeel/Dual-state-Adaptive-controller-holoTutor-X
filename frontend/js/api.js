@@ -16,6 +16,18 @@ const API = (() => {
 
     // ── Helpers ──────────────────────────────────────────────────────
 
+    // The login token (from auth.js) is sent with every request: "Authorization: Bearer <token>".
+    function _authHeaders(headers = {}) {
+        const token = (typeof Auth !== 'undefined' && Auth.getToken) ? Auth.getToken() : null;
+        if (token) headers['Authorization'] = `Bearer ${token}`;
+        return headers;
+    }
+
+    // 401 = the token is missing or has expired: go back to the login screen.
+    function _handleUnauthorized(status) {
+        if (status === 401 && typeof Auth !== 'undefined' && Auth.expire) Auth.expire();
+    }
+
     async function _request(method, path, { body, params } = {}) {
         let url = `${BASE_URL}${path}`;
         if (params) {
@@ -23,7 +35,7 @@ const API = (() => {
             url += `?${qs}`;
         }
 
-        const headers = {};
+        const headers = _authHeaders({});
         let fetchBody = body;
 
         // If body is plain object, JSON-encode it
@@ -35,6 +47,7 @@ const API = (() => {
         const res = await fetch(url, { method, headers, body: fetchBody });
 
         if (!res.ok) {
+            _handleUnauthorized(res.status);
             let error;
             try {
                 error = await res.json();
@@ -61,6 +74,8 @@ const API = (() => {
 
             const xhr = new XMLHttpRequest();
             xhr.open('POST', `${BASE_URL}/api/documents/upload`);
+            const authHeaders = _authHeaders({});
+            Object.keys(authHeaders).forEach(k => xhr.setRequestHeader(k, authHeaders[k]));
 
             xhr.upload.addEventListener('progress', (e) => {
                 if (e.lengthComputable && onProgress) {
@@ -72,6 +87,7 @@ const API = (() => {
                 if (xhr.status >= 200 && xhr.status < 300) {
                     resolve(JSON.parse(xhr.responseText));
                 } else {
+                    _handleUnauthorized(xhr.status);
                     let err;
                     try {
                         err = JSON.parse(xhr.responseText);
@@ -98,11 +114,12 @@ const API = (() => {
 
         const response = await fetch(`${BASE_URL}/api/chat`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: _authHeaders({ 'Content-Type': 'application/json' }),
             body: JSON.stringify(payload),
         });
 
         if (!response.ok) {
+            _handleUnauthorized(response.status);
             const error = await response.json();
             throw new Error(error.error || `HTTP ${response.status}`);
         }
