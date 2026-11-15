@@ -167,7 +167,7 @@ class FakeMetadata:
     def __init__(self, docs):
         self.docs = docs
 
-    async def list_documents(self, limit=50, offset=0):
+    async def list_documents(self, limit=50, offset=0, user_id=None):
         return self.docs, len(self.docs)
 
 

@@ -33,6 +33,7 @@ from app.storage.signal_store import SQLiteSignalStore
 from app.storage.user_store import SQLiteUserStore
 from app.services.auth_service import AuthService
 from app.services.evaluation import EvaluationManager
+from app.storage.interaction_log_store import SQLiteInteractionLogStore
 
 logger = logging.getLogger(__name__)
 
@@ -47,13 +48,14 @@ _chat_service: ChatService | None = None
 _insights_service: InsightsService | None = None
 _auth_service: AuthService | None = None
 _evaluation_manager: EvaluationManager | None = None
+_interaction_log: SQLiteInteractionLogStore | None = None
 
 
 async def startup() -> None:
     """Initialise all singletons.  Called once from ``main.py``."""
     global _metadata_store, _vector_store, _embedder, _document_service
     global _conversation_store, _llm_provider, _chat_service, _insights_service
-    global _auth_service, _evaluation_manager
+    global _auth_service, _evaluation_manager, _interaction_log
 
     logger.info("Initialising services …")
 
@@ -135,6 +137,10 @@ async def startup() -> None:
        # LSE: learner state from the student's last 3 rating signals (SRS 3.2.4)
     learner_estimator = LearnerStateEstimator(SQLiteSignalStore(str(settings.metadata_db_path)))
 
+    # LOG: one row per question, read by the administrator's Logs / Unanswered screens
+    _interaction_log = SQLiteInteractionLogStore(str(settings.metadata_db_path))
+    await _interaction_log.initialize()
+
     _chat_service = ChatService(
         retriever=retriever,
         prompt_builder=prompt_builder,
@@ -144,6 +150,7 @@ async def startup() -> None:
         learner_estimator=learner_estimator,
         decision_controller=decision_controller,
         top_k=settings.TOP_K_RETRIEVAL,
+        interaction_log=_interaction_log,
     )
 
     _insights_service = InsightsService(
@@ -179,6 +186,11 @@ def get_auth_service() -> AuthService:
 def get_evaluation_manager() -> EvaluationManager:
     assert _evaluation_manager is not None, "Evaluation manager not initialised"
     return _evaluation_manager
+
+
+def get_interaction_log() -> SQLiteInteractionLogStore:
+    assert _interaction_log is not None, "Interaction log not initialised"
+    return _interaction_log
 
 
 def get_metadata_store() -> SQLiteMetadataStore:

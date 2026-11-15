@@ -60,6 +60,7 @@ class ChatService:
         learner_estimator: LearnerStateEstimator,
         decision_controller: DecisionController,
         top_k: int = 5,
+        interaction_log: typing.Any = None,
     ) -> None:
         self._retriever = retriever
         self._prompt_builder = prompt_builder
@@ -69,6 +70,7 @@ class ChatService:
         self._learner = learner_estimator
         self._decision = decision_controller
         self._top_k = top_k
+        self._log = interaction_log  # LOG module; None = do not log (tests, scripts)
 
     async def chat_stream(
         self,
@@ -145,6 +147,7 @@ class ChatService:
             await self._conversation_store.add_message(
                 conv.id, ChatMessage(role="assistant", content=STATE_UNCERTAINTY_MESSAGE)
             )
+            await self._record(user_id, conv.id, request.message, topic, tutor_state, "")
             return
 
         # 4b. Build prompt with the chosen teaching action
@@ -174,6 +177,38 @@ class ChatService:
         # Save assistant message
         assistant_msg = ChatMessage(role="assistant", content=full_response)
         await self._conversation_store.add_message(conv.id, assistant_msg)
+        await self._record(user_id, conv.id, request.message, topic, tutor_state, full_response)
+
+    async def _record(
+        self,
+        user_id: int | None,
+        conversation_id: str,
+        question: str,
+        topic: str | None,
+        tutor_state: TutorState,
+        answer: str,
+    ) -> None:
+        """Write one interaction-log row. A logging failure never breaks the student's answer."""
+        if self._log is None:
+            return
+        try:
+            await self._log.add(
+                user_id=user_id,
+                conversation_id=conversation_id,
+                question=question,
+                topic=topic,
+                learner_state=tutor_state.learner_state,
+                evidence_state=tutor_state.evidence_state.value,
+                evidence_score=tutor_state.evidence_score,
+                teaching_action=tutor_state.teaching_action.value,
+                table_version=tutor_state.table_version,
+                # Unanswered = the tutor declined (State uncertainty) or the LLM returned nothing
+                answered=tutor_state.teaching_action is not TeachingAction.STATE_UNCERTAINTY
+                and bool(answer.strip()),
+                answer_chars=len(answer),
+            )
+        except Exception:  # noqa: BLE001
+            logger.exception("Could not write the interaction log")
 
     async def _estimate_learner(self, conversation_id: str, topic: str | None) -> str:
         """Ask the LSE module for the learner state, accepting sync or async estimators."""
