@@ -52,22 +52,27 @@ class DocumentService:
         self,
         filename: str,
         content: bytes,
+        user_id: int | None = None,
     ) -> str:
         """Validate, persist, and kick off async processing.
 
+        The file is saved in the uploader's own folder (SRS 3.2.2).
         Returns the new document ID.
         """
         self._validate_file(filename, len(content))
 
         file_hash = hashlib.sha256(content).hexdigest()
-        existing_doc = await self._metadata.get_document_by_hash(file_hash)
+        existing_doc = await self._metadata.get_document_by_hash(file_hash, user_id)
         if existing_doc is not None:
             logger.info("Duplicate upload detected '%s' → returning existing %s", filename, existing_doc.id)
             return existing_doc.id
 
         doc_id = uuid.uuid4().hex
         safe_name = f"{doc_id}_{filename}"
+        if user_id is not None:
+            safe_name = f"user_{user_id}/{safe_name}"
         dest = settings.upload_dir / safe_name
+        dest.parent.mkdir(parents=True, exist_ok=True)
 
         # Persist to disk
         dest.write_bytes(content)
@@ -80,6 +85,7 @@ class DocumentService:
             file_hash=file_hash,
             file_size=len(content),
             status=ProcessingStatus.PENDING,
+            user_id=user_id,
         )
         await self._metadata.save_document(document)
 
@@ -103,29 +109,38 @@ class DocumentService:
     # Read
     # ------------------------------------------------------------------
 
-    async def get_document(self, document_id: str) -> DocumentResponse:
+    async def _owned(self, document_id: str, user_id: int | None) -> Document:
+        """The document, if it exists and (when ``user_id`` is given) belongs to that user.
+        Another user's document is reported as not found, so its existence is not revealed."""
         doc = await self._metadata.get_document(document_id)
-        if doc is None:
+        if doc is None or (user_id is not None and doc.user_id != user_id):
             raise DocumentNotFoundError(document_id)
+        return doc
+
+    async def get_document(self, document_id: str, user_id: int | None = None) -> DocumentResponse:
+        doc = await self._owned(document_id, user_id)
         return DocumentResponse(**doc.model_dump())
 
     async def list_documents(
-        self, limit: int = 50, offset: int = 0
+        self, limit: int = 50, offset: int = 0, user_id: int | None = None
     ) -> DocumentListResponse:
-        docs, total = await self._metadata.list_documents(limit, offset)
+        docs, total = await self._metadata.list_documents(limit, offset, user_id=user_id)
         return DocumentListResponse(
             documents=[DocumentResponse(**d.model_dump()) for d in docs],
             total=total,
         )
 
+    async def document_ids_of(self, user_id: int) -> list[str]:
+        """IDs of the user's documents that are ready to answer questions from."""
+        docs, _ = await self._metadata.list_documents(limit=1000, offset=0, user_id=user_id)
+        return [d.id for d in docs if d.status == ProcessingStatus.COMPLETED]
+
     # ------------------------------------------------------------------
     # Delete
     # ------------------------------------------------------------------
 
-    async def delete_document(self, document_id: str) -> None:
-        doc = await self._metadata.get_document(document_id)
-        if doc is None:
-            raise DocumentNotFoundError(document_id)
+    async def delete_document(self, document_id: str, user_id: int | None = None) -> None:
+        doc = await self._owned(document_id, user_id)
 
         # Remove vectors
         await self._vectors.delete_by_document(document_id)

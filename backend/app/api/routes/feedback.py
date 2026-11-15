@@ -8,12 +8,15 @@ Body: {"conversation_id": "...", "signal": 1}
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
+from app.api.routes.auth import current_user
+from app.api.routes.chat import owned_conversation
 from app.config import settings
+from app.dependencies import get_conversation_store
 from app.services.learner_state import LearnerStateEstimator
 from app.storage.signal_store import SQLiteSignalStore
 
@@ -44,9 +47,14 @@ class FeedbackResponse(BaseModel):
 
 
 @router.post("/feedback", response_model=FeedbackResponse)
-async def submit_feedback(body: FeedbackRequest) -> FeedbackResponse:
+async def submit_feedback(
+    body: FeedbackRequest,
+    user: dict[str, Any] = Depends(current_user),
+    store=Depends(get_conversation_store),
+) -> FeedbackResponse:
     if not body.conversation_id.strip():
         raise HTTPException(status_code=422, detail="conversation_id is required")
+    await owned_conversation(body.conversation_id, user, store)  # rate only your own answers
     estimator = get_estimator()
     await estimator.add_signal(body.conversation_id, body.signal, body.topic)
     state = await estimator.estimate(body.conversation_id, body.topic)

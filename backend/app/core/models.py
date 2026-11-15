@@ -117,6 +117,7 @@ class Document(BaseModel):
     page_count: int = 0
     chunk_count: int = 0
     error_message: str | None = None
+    user_id: int | None = None  # the student who uploaded it (SRS 3.2.2)
 
 
 class DocumentInsight(BaseModel):
@@ -148,6 +149,7 @@ class DocumentResponse(BaseModel):
     page_count: int
     chunk_count: int
     error_message: str | None = None
+    user_id: int | None = None
 
 
 class DocumentListResponse(BaseModel):
@@ -238,3 +240,4 @@ class Conversation(BaseModel):
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     messages: list[ChatMessage] = Field(default_factory=list)
+    user_id: int | None = None  # the student it belongs to

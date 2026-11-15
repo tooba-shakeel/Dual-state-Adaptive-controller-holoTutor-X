@@ -112,9 +112,9 @@ class MetadataStore(ABC):
 
     @abstractmethod
     async def list_documents(
-        self, limit: int = 50, offset: int = 0
+        self, limit: int = 50, offset: int = 0, user_id: int | None = None
     ) -> tuple[list[Document], int]:
-        """Return a page of documents and the total count."""
+        """Return a page of documents and the total count (only one user's when ``user_id`` is given)."""
         ...
 
     @abstractmethod
@@ -135,8 +135,8 @@ class MetadataStore(ABC):
         ...
 
     @abstractmethod
-    async def get_document_by_hash(self, file_hash: str) -> Document | None:
-        """Retrieve a document by its file hash."""
+    async def get_document_by_hash(self, file_hash: str, user_id: int | None = None) -> Document | None:
+        """Retrieve a document by its file hash (among one user's documents when ``user_id`` is given)."""
         ...
 
     @abstractmethod
@@ -170,8 +170,10 @@ class ConversationStore(ABC):
         ...
 
     @abstractmethod
-    async def create_conversation(self, title: str = "New Conversation") -> Conversation:
-        """Create a new conversation."""
+    async def create_conversation(
+        self, title: str = "New Conversation", user_id: int | None = None
+    ) -> Conversation:
+        """Create a new conversation owned by ``user_id``."""
         ...
 
     @abstractmethod
@@ -181,9 +183,9 @@ class ConversationStore(ABC):
 
     @abstractmethod
     async def list_conversations(
-        self, limit: int = 50, offset: int = 0
+        self, limit: int = 50, offset: int = 0, user_id: int | None = None
     ) -> tuple[list[Conversation], int]:
-        """List all conversations."""
+        """List conversations (only one user's when ``user_id`` is given)."""
         ...
 
     @abstractmethod

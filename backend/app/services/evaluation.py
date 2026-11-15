@@ -493,8 +493,14 @@ class EvaluationManager:
     # ── running ──
 
     async def start(
-        self, versions: list[str], delay: float, document_ids: list[str] | None = None, fresh: bool = False
+        self,
+        versions: list[str],
+        delay: float,
+        document_ids: list[str] | None = None,
+        fresh: bool = False,
+        owner_id: int | None = None,
     ) -> dict[str, Any]:
+        """Start a background run over ``owner_id``'s completed documents (all documents if None)."""
         if self.running:
             raise EvaluationBusyError("An evaluation is already running")
         bad = [v for v in versions if v not in ALL_VERSIONS]
@@ -504,7 +510,7 @@ class EvaluationManager:
             raise ValueError("Upload the test question file first")
         questions = load_questions(self.questions_path)
 
-        docs, _ = await self._get_metadata().list_documents(limit=500, offset=0)
+        docs, _ = await self._get_metadata().list_documents(limit=500, offset=0, user_id=owner_id)
         ready = [d for d in docs if _value(d.status).lower() in ("completed", "ready")]
         if document_ids:
             ready = [d for d in ready if d.id in document_ids]
