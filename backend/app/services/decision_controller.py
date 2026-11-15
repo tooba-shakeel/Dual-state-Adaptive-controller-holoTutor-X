@@ -106,6 +106,16 @@ class DecisionController:
     def version(self) -> int:
         return self._version
 
+    @property
+    def cells(self) -> dict[str, dict[str, str]]:
+        """The table as plain strings (learner state -> evidence state -> action)."""
+        return {learner: {ev: a.value for ev, a in row.items()} for learner, row in self._cells.items()}
+
+    def set_table(self, cells: dict[str, dict[str, str]], version: int) -> None:
+        """Replace the table while the app runs (Tutor Settings screen). Invalid tables are rejected."""
+        self._cells = validate_cells(cells)
+        self._version = int(version)
+
     def decide(
         self,
         learner_state: str,

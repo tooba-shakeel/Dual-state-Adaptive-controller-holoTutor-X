@@ -85,6 +85,18 @@
 .logs-pager { justify-content: flex-end; margin-top: 0.75rem; }
 .admin-table td .admin-badge { white-space: nowrap; }
 
+/* Tutor Settings screen */
+.settings-limits { display: grid; grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr)); gap: 1rem; }
+.settings-number { max-width: 8rem; }
+.settings-table th, .settings-table td { text-align: left; }
+.settings-rowhead { white-space: nowrap; }
+.settings-select { width: 100%; min-width: 9rem; }
+.settings-select:disabled { opacity: 0.6; cursor: not-allowed; }
+.settings-changed { border-color: rgba(250, 204, 21, 0.9) !important; box-shadow: 0 0 0 1px rgba(250, 204, 21, 0.6); }
+.settings-buttons { margin-top: 1rem; }
+.settings-buttons .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.settings-diff { font-size: 0.82rem; }
+
 @media (max-width: 640px) {
     .admin-card { padding: 1rem; }
 }

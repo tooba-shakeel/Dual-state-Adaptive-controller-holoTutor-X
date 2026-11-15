@@ -36,11 +36,19 @@ Reply with exactly one word: YES or NO."""
         partial_limit: float = 0.50,
         strong_limit: float = 0.75,
     ) -> None:
+        self._llm = llm
+        self.set_limits(partial_limit, strong_limit)
+
+    @staticmethod
+    def check_limits(partial_limit: float, strong_limit: float) -> None:
         if not 0.0 <= partial_limit <= strong_limit <= 1.0:
             raise ValueError("Limits must satisfy 0 <= partial_limit <= strong_limit <= 1")
-        self._llm = llm
-        self._partial_limit = partial_limit
-        self._strong_limit = strong_limit
+
+    def set_limits(self, partial_limit: float, strong_limit: float) -> None:
+        """Change the limits while the app runs (Tutor Settings screen)."""
+        self.check_limits(partial_limit, strong_limit)
+        self._partial_limit = float(partial_limit)
+        self._strong_limit = float(strong_limit)
 
     @property
     def partial_limit(self) -> float:

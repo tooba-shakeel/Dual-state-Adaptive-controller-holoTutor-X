@@ -21,6 +21,8 @@ const App = (() => {
         if (typeof Admin !== 'undefined') Admin.init();
         // Logs / Unanswered screen (only for administrators; SRS LOG module)
         if (typeof Logs !== 'undefined') Logs.init();
+        // Tutor Settings screen (only for administrators; SRS 3.2.5, 3.2.6)
+        if (typeof TutorSettings !== 'undefined') TutorSettings.init();
 
         _initTabs();
 
