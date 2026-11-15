@@ -8,6 +8,7 @@ getter functions used by API routes.
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 from typing import Any
 
 from app.config import settings
@@ -31,6 +32,7 @@ from app.services.learner_state import LearnerStateEstimator
 from app.storage.signal_store import SQLiteSignalStore
 from app.storage.user_store import SQLiteUserStore
 from app.services.auth_service import AuthService
+from app.services.evaluation import EvaluationManager
 
 logger = logging.getLogger(__name__)
 
@@ -44,13 +46,14 @@ _llm_provider: OpenAILLMProvider | None = None
 _chat_service: ChatService | None = None
 _insights_service: InsightsService | None = None
 _auth_service: AuthService | None = None
+_evaluation_manager: EvaluationManager | None = None
 
 
 async def startup() -> None:
     """Initialise all singletons.  Called once from ``main.py``."""
     global _metadata_store, _vector_store, _embedder, _document_service
     global _conversation_store, _llm_provider, _chat_service, _insights_service
-    global _auth_service
+    global _auth_service, _evaluation_manager
 
     logger.info("Initialising services …")
 
@@ -149,6 +152,14 @@ async def startup() -> None:
         vector_store=_vector_store,
     )
 
+    # Evaluation mode (evaluator screen)
+    _evaluation_manager = EvaluationManager(
+        Path(settings.DATA_DIR) / "evaluation",
+        get_chat_service,
+        get_metadata_store,
+        top_k=settings.TOP_K_RETRIEVAL,
+    )
+
     logger.info("All services initialised ✓")
 
 
@@ -163,6 +174,11 @@ async def shutdown() -> None:
 def get_auth_service() -> AuthService:
     assert _auth_service is not None, "Auth service not initialised"
     return _auth_service
+
+
+def get_evaluation_manager() -> EvaluationManager:
+    assert _evaluation_manager is not None, "Evaluation manager not initialised"
+    return _evaluation_manager
 
 
 def get_metadata_store() -> SQLiteMetadataStore:

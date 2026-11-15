@@ -46,6 +46,10 @@ Reply with exactly one word: YES or NO."""
     def partial_limit(self) -> float:
         return self._partial_limit
 
+    @property
+    def strong_limit(self) -> float:
+        return self._strong_limit
+
     async def assess(
         self, question: str, citations: list[Citation]
     ) -> tuple[EvidenceState, float]:
