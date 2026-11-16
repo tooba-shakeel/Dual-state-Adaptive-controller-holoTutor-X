@@ -92,6 +92,7 @@ class AuthService:
         failed_login_window_minutes: int = 10,
         lock_minutes: int = 5,
         password_min_length: int = 8,
+        password_max_length: int = 64,
         clock: Callable[[], datetime] | None = None,
     ) -> None:
         self._store = store
@@ -101,6 +102,7 @@ class AuthService:
         self._lock = timedelta(minutes=lock_minutes)
         self._lock_minutes = lock_minutes
         self._min_length = password_min_length
+        self._max_length = password_max_length
         self._clock = clock or (lambda: datetime.now(timezone.utc))
 
     # ------------------------------------------------------------------
@@ -158,9 +160,10 @@ class AuthService:
             raise ValidationError("full_name", "Name is required")
         if not _EMAIL_RE.match(email):
             raise ValidationError("email", "Enter a valid e-mail address")
-        if len(password or "") < self._min_length:
+        if not self._min_length <= len(password or "") <= self._max_length:
             raise ValidationError(
-                "password", f"Password must be at least {self._min_length} characters"
+                "password",
+                f"Password must be {self._min_length} to {self._max_length} characters",
             )
         if await self._store.get_by_email(email) is not None:
             raise ConflictError("This e-mail is already used by another account")

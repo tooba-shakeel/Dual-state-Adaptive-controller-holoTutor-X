@@ -78,6 +78,17 @@ async def test_password_shorter_than_eight_is_rejected(auth):
 
 
 @pytest.mark.asyncio
+async def test_password_must_be_8_to_64_characters(auth):
+    for n, ok in [(7, False), (8, True), (20, True), (64, True), (65, False)]:
+        email = f"user{n}@ned.edu"
+        if ok:
+            user = await auth.sign_up("Student", email, "a" * n)
+            assert user["email"] == email
+        else:
+            with pytest.raises(ValidationError):
+                await auth.sign_up("Student", email, "a" * n)
+
+@pytest.mark.asyncio
 async def test_email_used_twice_is_rejected(auth):
     await auth.sign_up("Tooba", "tooba@ned.edu", "password1")
     with pytest.raises(ConflictError):

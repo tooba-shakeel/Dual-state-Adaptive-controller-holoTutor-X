@@ -179,6 +179,7 @@ const Auth = (() => {
                 error.hidden = true;
                 const fail = (text) => { error.textContent = text; error.hidden = false; };
                 if (!name.value.trim() || !email.value.trim() || !password.value) return fail('Fill in all the fields.');
+                if (password.value.length < 8 || password.value.length > 64) return fail('Password must be 8 to 64 characters.');
                 if (password.value !== confirm.value) return fail('The two passwords do not match.');
                 submit.disabled = true;
                 try {
