@@ -1,0 +1,139 @@
+/* Evaluation Mode screen (SRS 3.2.9, FR9). Uses inherited colours so it follows the app theme. */
+
+.eval-root [hidden] { display: none !important; }
+
+.eval-root {
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+}
+
+.eval-card {
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 16px;
+    padding: 1.25rem;
+}
+
+.eval-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 1.25rem;
+    margin-top: 1rem;
+}
+
+.eval-field { display: flex; flex-direction: column; gap: 0.5rem; }
+.eval-label { font-weight: 600; font-size: 0.9rem; }
+.eval-h3 { font-size: 1rem; font-weight: 600; margin: 1rem 0 0.5rem; }
+
+.eval-muted { font-size: 0.8rem; opacity: 0.7; margin: 0.25rem 0 0; line-height: 1.4; }
+.eval-muted a { color: var(--primary, #818cf8); }
+.eval-legend { margin-top: 0.75rem; }
+
+.eval-error {
+    margin: 0.75rem 0 0;
+    padding: 0.6rem 0.9rem;
+    border-radius: 10px;
+    background: rgba(239, 68, 68, 0.15);
+    border: 1px solid rgba(239, 68, 68, 0.45);
+    font-size: 0.9rem;
+}
+
+.eval-note {
+    margin: 0.75rem 0 0;
+    padding: 0.6rem 0.9rem;
+    border-radius: 10px;
+    background: rgba(245, 158, 11, 0.13);
+    border: 1px solid rgba(245, 158, 11, 0.4);
+    font-size: 0.9rem;
+}
+
+.eval-file, .eval-number, .eval-select {
+    font: inherit;
+    color: inherit;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    border-radius: 10px;
+    padding: 0.5rem 0.7rem;
+    max-width: 100%;
+}
+.eval-select option { color: #111827; }
+.eval-number { width: 7rem; }
+.eval-select--sm { padding: 0.3rem 0.5rem; font-size: 0.85rem; }
+
+.eval-checks { display: flex; flex-direction: column; gap: 0.4rem; }
+.eval-check { display: flex; align-items: center; gap: 0.4rem; font-size: 0.9rem; cursor: pointer; }
+
+.eval-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
+.eval-actions .btn { text-decoration: none; }
+.eval-card > .eval-actions { margin-top: 1.25rem; }
+
+.eval-runname { font-size: 1.05rem; }
+
+.eval-progress {
+    height: 10px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.1);
+    overflow: hidden;
+    margin-top: 0.75rem;
+}
+.eval-progress__fill {
+    height: 100%;
+    width: 0;
+    border-radius: 999px;
+    background: linear-gradient(90deg, #6366f1, #a855f7);
+    transition: width 0.4s ease;
+}
+
+.eval-badge {
+    display: inline-block;
+    padding: 0.1rem 0.6rem;
+    border-radius: 999px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    background: rgba(255, 255, 255, 0.12);
+    vertical-align: middle;
+}
+.eval-badge--running   { background: rgba(99, 102, 241, 0.35); }
+.eval-badge--completed,
+.eval-badge--answered  { background: rgba(34, 197, 94, 0.28); }
+.eval-badge--stopped,
+.eval-badge--clarified { background: rgba(245, 158, 11, 0.3); }
+.eval-badge--refused   { background: rgba(148, 163, 184, 0.3); }
+.eval-badge--failed,
+.eval-badge--error     { background: rgba(239, 68, 68, 0.35); }
+
+.eval-tablewrap { overflow-x: auto; }
+.eval-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+.eval-table th, .eval-table td {
+    text-align: left;
+    padding: 0.5rem 0.6rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    vertical-align: top;
+}
+.eval-table th { font-weight: 600; white-space: nowrap; opacity: 0.85; }
+.eval-version { font-weight: 600; }
+.eval-bad { color: #f87171; }
+.eval-q { min-width: 220px; }
+
+.eval-table--rows .eval-row { cursor: pointer; }
+.eval-table--rows .eval-row:hover { background: rgba(255, 255, 255, 0.05); }
+.eval-detail td { background: rgba(0, 0, 0, 0.18); }
+.eval-detail p { margin: 0.25rem 0; }
+.eval-answer { white-space: pre-wrap; line-height: 1.5; }
+
+@media (max-width: 640px) {
+    .eval-card { padding: 1rem; }
+}
+
+/* Evaluator screen additions */
+.eval-badge--idle      { background: rgba(148, 163, 184, 0.25); }
+.eval-badge--stopping  { background: rgba(245, 158, 11, 0.3); }
+.eval-badge--finished  { background: rgba(34, 197, 94, 0.28); }
+.eval-options { margin-top: 1rem; display: flex; flex-direction: column; gap: 0.5rem; }
+.eval-linkbtn {
+    background: none; border: 0; padding: 0; font: inherit; cursor: pointer;
+    color: var(--primary, #818cf8); text-decoration: underline;
+}
+.eval-info { font-weight: 600; }
+.eval-last { font-family: monospace; word-break: break-word; }
