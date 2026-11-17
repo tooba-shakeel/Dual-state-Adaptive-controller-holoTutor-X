@@ -88,6 +88,16 @@ async def test_password_must_be_8_to_64_characters(auth):
             with pytest.raises(ValidationError):
                 await auth.sign_up("Student", email, "a" * n)
 
+
+@pytest.mark.asyncio
+async def test_emoji_count_as_one_character(auth):
+    # Copilot finding: an emoji is one character, like in the Sign Up form.
+    with pytest.raises(ValidationError):
+        await auth.sign_up("Student", "emoji4@ned.edu", "😀" * 4)
+    user = await auth.sign_up("Student", "emoji33@ned.edu", "😀" * 33)
+    assert user["email"] == "emoji33@ned.edu"
+
+
 @pytest.mark.asyncio
 async def test_email_used_twice_is_rejected(auth):
     await auth.sign_up("Tooba", "tooba@ned.edu", "password1")
