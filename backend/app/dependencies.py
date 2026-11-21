@@ -75,6 +75,7 @@ async def startup() -> None:
         failed_login_window_minutes=settings.FAILED_LOGIN_WINDOW_MINUTES,
         lock_minutes=settings.LOCK_MINUTES,
         password_min_length=settings.PASSWORD_MIN_LENGTH,
+        password_max_length=settings.PASSWORD_MAX_LENGTH,
     )
     await _auth_service.ensure_administrator(
         settings.ADMIN_NAME, settings.ADMIN_EMAIL, settings.ADMIN_PASSWORD

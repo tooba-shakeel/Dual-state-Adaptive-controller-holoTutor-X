@@ -92,6 +92,7 @@ class Settings(BaseSettings):
 
     # ── Accounts (SRS 3.2.1, UAM) ────────────────────────────────────────
     PASSWORD_MIN_LENGTH: int = 8
+    PASSWORD_MAX_LENGTH: int = 64
     TOKEN_IDLE_MINUTES: int = 30  # login token stops working after this much inactivity
     MAX_FAILED_LOGINS: int = 5  # wrong passwords allowed within the window below
     FAILED_LOGIN_WINDOW_MINUTES: int = 10
