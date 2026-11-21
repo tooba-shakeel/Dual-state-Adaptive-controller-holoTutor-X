@@ -40,6 +40,14 @@ FOLLOW_UP_WORDS = {
 }
 FOLLOW_UP_MAX_WORDS = 8
 
+# The tutor ends some answers with "Check question: ..." (SRS 3.2.4). The student's next
+# message is read as the answer to it, unless it is a clear new question: it ends with
+# "?" or starts with one of these words. A clear new question is also searched on its
+# own. Words such as "when" or "because" are left out on purpose: answers to
+# "When is ...?" or "Why ...?" often start with them.
+CHECK_QUESTION_MARK = "Check question:"
+QUESTION_STARTS = {"what", "explain", "define", "describe", "tell", "give", "list", "compare", "show"}
+
 
 class LearnerStateEstimator(typing.Protocol):
     """What ChatService needs from the LSE module (sync or async methods both work)."""
@@ -71,6 +79,7 @@ class ChatService:
         self._decision = decision_controller
         self._top_k = top_k
         self._log = interaction_log  # LOG module; None = do not log (tests, scripts)
+        self._topics: dict[str, str] = {}  # conversation id -> last question that was searched on its own
 
     async def chat_stream(
         self,
@@ -98,22 +107,46 @@ class ChatService:
 
         history = conv.messages[-10:] if conv else [] # Keep last 10 messages for context
 
-        # 2. Retrieve context (a follow-up is searched with the question it refers to)
-        search_query = self._search_query(request.message, history)
+        # 2. Retrieve context.
+        # A reply such as "general definition", "because the customer is unsure" or
+        # "explain again" names no topic on its own. Unless the message is a clear new
+        # question, it is searched both alone and together with the conversation's topic,
+        # and the search with the better similarity score is used.
+        all_messages = conv.messages if conv else []
+        check_question = self._open_check_question(request.message, all_messages)
+        clarify_question = (
+            None if check_question is not None
+            else self._open_clarify_question(request.message, all_messages)
+        )
+        earlier_question = self._topics.get(conv.id) or self._previous_question(all_messages)
+
+        candidates = [request.message]
+        standalone = self._looks_like_new_question(request.message) and not self._is_follow_up(request.message)
+        if earlier_question and not standalone and earlier_question != request.message:
+            candidates += [f"{earlier_question} {request.message}", earlier_question]
+
         document_ids = request.document_ids
         if allowed_document_ids is not None:
             document_ids = [d for d in (document_ids or allowed_document_ids) if d in allowed_document_ids]
-        if allowed_document_ids is not None and not document_ids:
-            citations = []  # the student has no ready document: nothing to search
-        else:
-            citations = await self._retriever.retrieve(
-                query=search_query,
-                top_k=self._top_k,
-                document_ids=document_ids,
-            )
+        search_query, citations, best = request.message, [], 0.0
+        if allowed_document_ids is None or document_ids:  # else: no ready document, nothing to search
+            best = -1.0
+            for query in candidates:
+                found = await self._retriever.retrieve(query=query, top_k=self._top_k, document_ids=document_ids)
+                score = max((c.score or 0.0 for c in found), default=0.0)
+                if score > best:  # ties keep the earlier candidate: the message alone first
+                    search_query, citations, best = query, found, score
+        # The topic stays with the conversation until a message wins on its own AND finds
+        # material: a question the PDFs cannot answer ("why no check question?") is not a topic.
+        if search_query == request.message and best >= self._evidence.partial_limit:
+            self._topics[conv.id] = request.message
+        logger.info("Search query: %r (from %d candidates)", search_query, len(candidates))
 
         # 3. Dual-State decision: evidence (ECA) + learner (LSE) -> action (DSC)
         evidence_state, evidence_score = await self._evidence.assess(search_query, citations)
+        if clarify_question is not None and evidence_state is EvidenceState.CONFLICTING:
+            # The student has already said what they want; asking again would loop
+            evidence_state = EvidenceState.PARTIAL
         topic = self._topic_of(citations)
         learner_state = await self._estimate_learner(conv.id, topic)
         action = self._decision.decide(learner_state, evidence_state, conversation_id=conv.id)
@@ -151,9 +184,23 @@ class ChatService:
             return
 
         # 4b. Build prompt with the chosen teaching action
+        query = request.message
+        if check_question is not None:
+            query = (
+                f'I am answering your check question "{check_question}".\n'
+                f"My answer: {request.message}\n"
+                "Tell me whether my answer is correct, partly correct or wrong, "
+                "explain why from the passages, and give the correct answer if I missed something."
+            )
+        elif clarify_question is not None:
+            query = (
+                f'You asked me: "{clarify_question}"\n'
+                f"My reply: {request.message}\n"
+                f'Now answer my earlier question "{earlier_question or ""}" in the way I asked for.'
+            )
         messages = self._prompt_builder.build_messages(
             history=history,
-            query=request.message,
+            query=query,
             citations=usable,
             action=action,
         )
@@ -223,18 +270,66 @@ class ChatService:
         return 0 < len(words) <= FOLLOW_UP_MAX_WORDS and any(w in FOLLOW_UP_WORDS for w in words)
 
     @classmethod
-    def _search_query(cls, message: str, history: list[ChatMessage]) -> str:
-        """A follow-up is searched with the latest earlier question that is not itself a follow-up.
+    def _previous_question(cls, history: list[ChatMessage]) -> str | None:
+        """The latest earlier user message that is a clear question of its own.
 
-        Words such as "explain again" carry no topic and only lower the similarity
-        scores; the LLM still sees the whole conversation through the history.
+        Used when the conversation's topic is not in memory (e.g. after a restart).
         """
-        if not cls._is_follow_up(message):
-            return message
-        for msg in reversed(history):
-            if msg.role == "user" and not cls._is_follow_up(msg.content):
-                return msg.content
-        return message
+        for i in range(len(history) - 1, -1, -1):
+            msg = history[i]
+            if msg.role != "user" or not cls._looks_like_new_question(msg.content) \
+                    or cls._is_follow_up(msg.content):
+                continue
+            reply = history[i + 1] if i + 1 < len(history) else None
+            if reply is not None and reply.content.strip() == STATE_UNCERTAINTY_MESSAGE:
+                continue  # nothing was found for it, so it is not the topic
+            return msg.content
+        return None
+
+    @staticmethod
+    def _last_tutor_reply(history: list[ChatMessage]) -> ChatMessage | None:
+        """The tutor's last real reply (a "could not find" reply is skipped)."""
+        return next(
+            (m for m in reversed(history)
+             if m.role == "assistant" and m.content.strip() != STATE_UNCERTAINTY_MESSAGE),
+            None,
+        )
+
+    @staticmethod
+    def _looks_like_new_question(message: str) -> bool:
+        text = message.strip()
+        words = re.findall(r"[a-z']+", text.lower())
+        return not words or text.endswith("?") or words[0] in QUESTION_STARTS
+
+    @classmethod
+    def _open_clarify_question(cls, message: str, history: list[ChatMessage]) -> str | None:
+        """The Clarify question the student is replying to, or None.
+
+        Clarify answers with one question and no check question, so a tutor reply that
+        ends with "?" and has no "Check question:" is a Clarify question.
+        """
+        last_reply = cls._last_tutor_reply(history)
+        if last_reply is None or CHECK_QUESTION_MARK in last_reply.content:
+            return None
+        if not last_reply.content.strip().endswith("?") or cls._looks_like_new_question(message):
+            return None
+        return last_reply.content.strip()
+
+    @classmethod
+    def _open_check_question(cls, message: str, history: list[ChatMessage]) -> str | None:
+        """The check question the student is answering, or None.
+
+        It is open when the tutor's last reply ends with "Check question: ..." and the
+        new message does not look like a new question. A "could not find" reply is
+        skipped, so the student can still answer after it.
+        """
+        last_reply = cls._last_tutor_reply(history)
+        if last_reply is None or CHECK_QUESTION_MARK not in last_reply.content:
+            return None
+        if cls._looks_like_new_question(message):
+            return None
+        question = last_reply.content.rsplit(CHECK_QUESTION_MARK, 1)[1].strip()
+        return question.strip("*_ ").strip() or None
 
     @staticmethod
     def _topic_of(citations: list[Citation]) -> str | None:

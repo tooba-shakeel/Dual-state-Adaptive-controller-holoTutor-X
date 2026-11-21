@@ -107,40 +107,45 @@ async def test_strong_evidence_uncertain_learner_gets_worked_example(mock_conver
     assert "Check question:" in answer_prompt
 
 
-def conversation_with(*user_questions):
-    messages = []
-    for q in user_questions:
-        messages += [ChatMessage(role="user", content=q), ChatMessage(role="assistant", content="...")]
-    return Conversation(id="conv1", title="Conv", messages=messages)
+def conversation_with(*messages):
+    """messages alternate: user, assistant, user, assistant ..."""
+    roles = ["user", "assistant"]
+    return Conversation(id="conv1", title="Conv", messages=[
+        ChatMessage(role=roles[i % 2], content=m) for i, m in enumerate(messages)
+    ])
 
 
-@pytest.mark.asyncio
-async def test_follow_up_is_searched_with_previous_question(mock_conversation_store):
-    mock_conversation_store.get_conversation.return_value = conversation_with(
-        "tell me about external inputs", "explain again"
-    )
-    llm = MockLLMProvider()
-    service = make_service([cite(0.60)], mock_conversation_store, llm)
-    await run_in(service, "explain this topic again", "conv1")
+def topic_retriever(service, topic):
+    """Fake search: a query that mentions the topic finds good passages (0.66 and 0.63),
+    any other query finds only weak ones (0.30). Records every query."""
+    service.queries = []
 
-    query = service._retriever.retrieve.call_args.kwargs["query"]
-    assert query == "tell me about external inputs"
+    async def retrieve(query, top_k, document_ids):
+        service.queries.append(query)
+        if topic in query.lower():
+            return [cite(0.66, text="topic passage"), cite(0.63)]
+        return [cite(0.30, text="weak passage")]
 
-
-@pytest.mark.asyncio
-async def test_new_question_is_not_treated_as_follow_up(mock_conversation_store):
-    mock_conversation_store.get_conversation.return_value = conversation_with("tell me about external inputs")
-    llm = MockLLMProvider()
-    service = make_service([], mock_conversation_store, llm)
-    text = await run_in(service, "What is the capital of France?", "conv1")
-
-    assert service._retriever.retrieve.call_args.kwargs["query"] == "What is the capital of France?"
-    assert text == STATE_UNCERTAINTY_MESSAGE
+    service._retriever.retrieve.side_effect = retrieve
+    return service
 
 
-async def run_in(service, message, conversation_id):
+async def run_in(service, message, conversation_id="conv1"):
     request = ChatRequest(message=message, conversation_id=conversation_id)
-    return "".join([chunk async for chunk, _, _ in service.chat_stream(request)])
+    events = [event async for event in service.chat_stream(request)]
+    return "".join(c for c, _, _ in events), events[0][1], events[0][2]
+
+
+def make_topic_service(store, conv, topic="waterfall", llm=None):
+    store.get_conversation.return_value = conv
+    llm = llm or MockLLMProvider()
+    return topic_retriever(make_service([], store, llm), topic), llm
+
+
+WATERFALL_CHECK = (
+    "What is the waterfall model?",
+    "The waterfall model has fixed stages.\n**Check question:** When can we use it?",
+)
 
 
 @pytest.mark.asyncio
@@ -151,3 +156,148 @@ async def test_confused_learner_gets_simplify(mock_conversation_store):
 
     assert meta["tutor_state"].evidence_state is EvidenceState.PARTIAL
     assert meta["tutor_state"].teaching_action is TeachingAction.SIMPLIFY
+
+
+# ── replies that name no topic are searched with the conversation's topic ──
+
+@pytest.mark.parametrize("reply", [
+    "explain again",
+    "No, we cannot use it as requirements are not clearly specified",
+    "when we have to follow sequence",
+    "because customer does not know about the whole project",
+    "general definition",
+    "ok",
+])
+@pytest.mark.asyncio
+async def test_any_reply_keeps_the_topic(mock_conversation_store, reply):
+    service, _ = make_topic_service(mock_conversation_store, conversation_with(*WATERFALL_CHECK))
+    text, citations, meta = await run_in(service, reply)
+
+    assert meta["tutor_state"].evidence_state is EvidenceState.STRONG or \
+        meta["tutor_state"].evidence_state is EvidenceState.PARTIAL
+    assert text == "Here is the answer."  # never "could not find"
+    assert citations[0].text == "topic passage"
+
+
+@pytest.mark.parametrize("question", ["What is the spiral model?", "explain the spiral model"])
+@pytest.mark.asyncio
+async def test_clear_new_question_is_searched_on_its_own(mock_conversation_store, question):
+    service, llm = make_topic_service(mock_conversation_store, conversation_with(*WATERFALL_CHECK), topic="spiral")
+    await run_in(service, question)
+
+    assert service.queries == [question]
+    assert "check question" not in llm.calls[-1][-1].content
+
+
+@pytest.mark.asyncio
+async def test_off_topic_question_is_not_mixed_with_the_old_topic(mock_conversation_store):
+    service, llm = make_topic_service(mock_conversation_store, conversation_with(*WATERFALL_CHECK))
+    text, _, meta = await run_in(service, "What is the capital of France?")
+
+    assert service.queries == ["What is the capital of France?"]
+    assert text == STATE_UNCERTAINTY_MESSAGE
+
+
+@pytest.mark.asyncio
+async def test_reply_that_names_its_own_topic_wins_on_its_own(mock_conversation_store):
+    service, _ = make_topic_service(mock_conversation_store, conversation_with(*WATERFALL_CHECK), topic="spiral")
+    _, citations, _ = await run_in(service, "the spiral model is better here")
+
+    assert citations[0].text == "topic passage"
+
+
+@pytest.mark.asyncio
+async def test_topic_is_found_after_many_replies(mock_conversation_store):
+    messages = list(WATERFALL_CHECK)
+    for i in range(6):  # six answers push the first question out of the last 10 messages
+        messages += [f"because of reason {i}", f"Good.\nCheck question: Why does point {i} matter?"]
+    service, _ = make_topic_service(mock_conversation_store, conversation_with(*messages))
+    text, citations, _ = await run_in(service, "because customer does not know the whole project")
+
+    assert text == "Here is the answer."
+    assert citations[0].text == "topic passage"
+
+
+# ── how the tutor is asked to respond ──
+
+@pytest.mark.asyncio
+async def test_answer_to_check_question_is_marked_for_the_llm(mock_conversation_store):
+    service, llm = make_topic_service(mock_conversation_store, conversation_with(*WATERFALL_CHECK))
+    await run_in(service, "when we have to follow sequence")
+
+    student_turn = llm.calls[-1][-1].content
+    assert 'check question "When can we use it?"' in student_turn
+    assert "My answer: when we have to follow sequence" in student_turn
+
+
+@pytest.mark.asyncio
+async def test_answer_after_a_could_not_find_reply_still_answers_the_check_question(mock_conversation_store):
+    conv = conversation_with(*WATERFALL_CHECK, "no idea really", STATE_UNCERTAINTY_MESSAGE)
+    service, llm = make_topic_service(mock_conversation_store, conv)
+    text, _, _ = await run_in(service, "only when requirements are clear")
+
+    assert text == "Here is the answer."
+    assert 'check question "When can we use it?"' in llm.calls[-1][-1].content
+
+
+class ConflictLLM(MockLLMProvider):
+    """Says the passages contradict each other, so the evidence is Conflicting."""
+
+    async def generate_stream(self, messages, context):
+        self.calls.append(messages)
+        yield "YES" if "contradict" in messages[0].content else "Here is the answer."
+
+
+EVOLUTIONARY_CLARIFY = (
+    "now explain what is evolutionary model?",
+    "To clarify, are you asking for a general definition of the Evolutionary Process Model, "
+    "or how it differs from the Waterfall Model?",
+)
+
+
+@pytest.mark.asyncio
+async def test_reply_to_clarify_is_answered(mock_conversation_store):
+    service, llm = make_topic_service(mock_conversation_store, conversation_with(*EVOLUTIONARY_CLARIFY),
+                                      topic="evolutionary")
+    text, citations, _ = await run_in(service, "general definition")
+
+    assert text == "Here is the answer."
+    assert citations[0].text == "topic passage"
+    student_turn = llm.calls[-1][-1].content
+    assert "My reply: general definition" in student_turn
+    assert 'earlier question "now explain what is evolutionary model?"' in student_turn
+
+
+@pytest.mark.asyncio
+async def test_reply_to_clarify_does_not_clarify_again(mock_conversation_store):
+    service, _ = make_topic_service(mock_conversation_store, conversation_with(*EVOLUTIONARY_CLARIFY),
+                                    topic="evolutionary", llm=ConflictLLM())
+    _, _, meta = await run_in(service, "general definition")
+
+    assert meta["tutor_state"].evidence_state is EvidenceState.PARTIAL
+    assert meta["tutor_state"].teaching_action is not TeachingAction.CLARIFY
+
+
+@pytest.mark.asyncio
+async def test_unanswerable_question_does_not_replace_the_topic(mock_conversation_store):
+    service, _ = make_topic_service(mock_conversation_store, conversation_with(*EVOLUTIONARY_CLARIFY),
+                                    topic="evolutionary")
+    meta_question = "you did not ask a check question why?"
+    text, _, _ = await run_in(service, meta_question)
+    assert text == STATE_UNCERTAINTY_MESSAGE
+
+    conv = conversation_with(*EVOLUTIONARY_CLARIFY, meta_question, STATE_UNCERTAINTY_MESSAGE)
+    mock_conversation_store.get_conversation.return_value = conv
+    text, citations, _ = await run_in(service, "i would like to know the differences")
+    assert text == "Here is the answer."
+    assert citations[0].text == "topic passage"
+
+
+@pytest.mark.asyncio
+async def test_after_restart_an_unanswered_question_is_not_the_topic(mock_conversation_store):
+    conv = conversation_with(*EVOLUTIONARY_CLARIFY, "you did not ask a check question why?", STATE_UNCERTAINTY_MESSAGE)
+    service, _ = make_topic_service(mock_conversation_store, conv, topic="evolutionary")
+    text, citations, _ = await run_in(service, "i would like to know the differences")
+
+    assert text == "Here is the answer."
+    assert citations[0].text == "topic passage"
