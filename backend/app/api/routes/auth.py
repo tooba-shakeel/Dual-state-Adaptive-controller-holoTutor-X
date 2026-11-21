@@ -14,6 +14,7 @@ from typing import Any, Literal
 from fastapi import APIRouter, Depends, Header
 from pydantic import BaseModel
 
+from app.core.exceptions import ValidationError
 from app.dependencies import get_auth_service
 from app.services.auth_service import ADMINISTRATOR, AuthService
 
@@ -26,6 +27,7 @@ class SignUpRequest(BaseModel):
     full_name: str
     email: str
     password: str
+    consent: bool = False   # the student agrees that questions and ratings are stored
 
 
 class LoginRequest(BaseModel):
@@ -67,7 +69,9 @@ def require_roles(*roles: str):
 
 @router.post("/auth/signup", status_code=201)
 async def sign_up(body: SignUpRequest, auth: AuthService = Depends(get_auth_service)) -> dict[str, Any]:
-    return await auth.sign_up(body.full_name, body.email, body.password)
+    if not body.consent:
+        raise ValidationError("consent", "You must agree to the storage of your questions and ratings")
+    return await auth.sign_up(body.full_name, body.email, body.password, consent=True)
 
 
 @router.post("/auth/login")

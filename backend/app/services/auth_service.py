@@ -109,9 +109,11 @@ class AuthService:
     # Accounts
     # ------------------------------------------------------------------
 
-    async def sign_up(self, full_name: str, email: str, password: str) -> dict[str, Any]:
+    async def sign_up(
+        self, full_name: str, email: str, password: str, consent: bool = False
+    ) -> dict[str, Any]:
         """A new student creates an account (sign up always gives the Student role)."""
-        return await self._create_account(full_name, email, password, STUDENT)
+        return await self._create_account(full_name, email, password, STUDENT, consent=consent)
 
     async def create_evaluator(
         self, admin: dict[str, Any], full_name: str, email: str, password: str
@@ -152,7 +154,7 @@ class AuthService:
         return public_user(user)
 
     async def _create_account(
-        self, full_name: str, email: str, password: str, role: str
+        self, full_name: str, email: str, password: str, role: str, consent: bool = False
     ) -> dict[str, Any]:
         full_name = (full_name or "").strip()
         email = (email or "").strip().lower()
@@ -168,7 +170,7 @@ class AuthService:
         if await self._store.get_by_email(email) is not None:
             raise ConflictError("This e-mail is already used by another account")
         user = await self._store.create_user(
-            full_name, email, hash_password(password), role, self._clock()
+            full_name, email, hash_password(password), role, self._clock(), consent_given=consent
         )
         return public_user(user)
 

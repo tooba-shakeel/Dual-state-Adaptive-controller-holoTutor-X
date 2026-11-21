@@ -73,7 +73,7 @@ class Settings(BaseSettings):
     LOG_LEVEL: str = "INFO"
 
     # ── App metadata ─────────────────────────────────────────────────────
-    APP_NAME: str = "PDF RAG System"
+    APP_NAME: str = "HoloTutor-X System"
     APP_VERSION: str = "0.1.0"
 
     # ── LLM / RAG ────────────────────────────────────────────────────────

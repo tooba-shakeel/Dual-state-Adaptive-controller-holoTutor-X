@@ -135,8 +135,30 @@ class ChatComponent {
         this.scrollToBottom();
     }
     
-    async sendMessage() {
-        const text = this.inputField.value.trim();
+    // True when the "answer" is really an error message (e.g. the AI wait limit or a usage limit)
+    static isFailedAnswer(text) {
+        const t = String(text || '').trim();
+        return t.startsWith('Error:') || t.includes('[LLM Error:');
+    }
+
+    // Retry button under a failed answer: removes the failed pair and asks the same question again
+    appendRetryButton(msgDiv, userDiv, question) {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'btn btn--sm chat-retry';
+        btn.textContent = 'Retry';
+        btn.addEventListener('click', () => {
+            if (this.isGenerating) return;
+            userDiv.remove();
+            msgDiv.remove();
+            this.sendMessage(question);
+        });
+        msgDiv.appendChild(btn);
+        this.scrollToBottom();
+    }
+
+    async sendMessage(retryText) {
+        const text = (typeof retryText === 'string' ? retryText : this.inputField.value).trim();
         if (!text || this.isGenerating) return;
         
         // UI reset
@@ -145,7 +167,7 @@ class ChatComponent {
         this.isGenerating = true;
         
         // Add user message
-        this.appendMessage('user', text);
+        const { msgDiv: userDiv } = this.appendMessage('user', text);
         
         // Create empty assistant message for streaming
         const { msgDiv, contentDiv } = this.appendMessage('assistant', '<span class="status-dot status-dot--loading"></span> Thinking...');
@@ -184,8 +206,10 @@ class ChatComponent {
                 this.scrollToBottom();
             });
             
-            // Rating buttons under the finished answer
-            if (fullResponse && this.currentConversationId) {
+            // Rating buttons under the finished answer; a Retry button if the answer is an error
+            if (ChatComponent.isFailedAnswer(fullResponse)) {
+                this.appendRetryButton(msgDiv, userDiv, text);
+            } else if (fullResponse && this.currentConversationId) {
                 this.appendFeedbackButtons(msgDiv, this.currentConversationId, answerTopic);
             }
             
@@ -194,7 +218,12 @@ class ChatComponent {
             
         } catch (e) {
             console.error('Chat error:', e);
-            contentDiv.innerHTML = `<span style="color:var(--danger)">Error: ${e.message}</span>`;
+            contentDiv.innerHTML = '';
+            const errorText = document.createElement('span');
+            errorText.style.color = 'var(--danger)';
+            errorText.textContent = `Error: ${e.message}`;
+            contentDiv.appendChild(errorText);
+            this.appendRetryButton(msgDiv, userDiv, text);
         } finally {
             this.isGenerating = false;
             this.inputField.focus();
@@ -308,12 +337,17 @@ class ChatComponent {
         this.messagesContainer.scrollTop = this.messagesContainer.scrollHeight;
     }
     
-    exportConversation() {
+    async exportConversation() {
         if (!this.currentConversationId) {
             App.toast('No conversation selected', 'error');
             return;
         }
         App.toast('Starting export...', 'info');
-        window.location.href = `/api/export/chat/${this.currentConversationId}/txt`;
+        try {
+            await API.downloadFile(`/api/export/chat/${this.currentConversationId}/txt`, 'chat.txt');
+        } catch (e) {
+            console.error('Export error:', e);
+            App.toast(`Export failed: ${e.message}`, 'error');
+        }
     }
 }

@@ -122,7 +122,7 @@ const Auth = (() => {
 
     function cardShell(title, subtitle, form, switchText, switchLabel, switchTo) {
         return el('div', { class: 'auth-card' },
-            el('h1', { class: 'auth-title', text: 'PDF RAG' }),
+            el('h1', { class: 'auth-title', text: 'HoloTutor-X' }),
             el('h2', { class: 'auth-subtitle', text: title }),
             subtitle ? el('p', { class: 'auth-muted', text: subtitle }) : null,
             form,
@@ -169,6 +169,9 @@ const Auth = (() => {
         const email = el('input', { type: 'email', class: 'auth-input', autocomplete: 'username', required: true });
         const password = el('input', { type: 'password', class: 'auth-input', autocomplete: 'new-password', required: true });
         const confirm = el('input', { type: 'password', class: 'auth-input', autocomplete: 'new-password', required: true });
+        const consent = el('input', { type: 'checkbox', class: 'auth-consent__box' });
+        const consentRow = el('label', { class: 'auth-consent' }, consent,
+            el('span', { text: 'I agree that my questions and ratings are stored to adapt the tutoring.' }));
         const error = el('p', { class: 'auth-error', hidden: true });
         const submit = el('button', { type: 'submit', class: 'btn btn--primary auth-submit', text: 'Create account' });
 
@@ -179,6 +182,7 @@ const Auth = (() => {
                 error.hidden = true;
                 const fail = (text) => { error.textContent = text; error.hidden = false; };
                 if (!name.value.trim() || !email.value.trim() || !password.value) return fail('Fill in all the fields.');
+                if (!consent.checked) return fail('Please agree to the storage of your questions and ratings to create an account.');
                 const pwLength = Array.from(password.value).length;   // count characters like the server (an emoji is 1)
                 if (pwLength < 8 || pwLength > 64) return fail('Password must be 8 to 64 characters.');
                 if (password.value !== confirm.value) return fail('The two passwords do not match.');
@@ -186,6 +190,7 @@ const Auth = (() => {
                 try {
                     await call('POST', '/api/auth/signup', {
                         full_name: name.value.trim(), email: email.value.trim(), password: password.value,
+                        consent: true,
                     });
                 } catch (err) {
                     submit.disabled = false;
@@ -200,7 +205,7 @@ const Auth = (() => {
                 }
             },
         }, field('Full name', name), field('Email', email), field('Password', password),
-           field('Confirm password', confirm), error, submit);
+           field('Confirm password', confirm), consentRow, error, submit);
 
         return cardShell('Create your account', 'Students can sign up here.', form,
             'Already have an account?', 'Log in', 'login');

@@ -91,3 +91,10 @@
     .auth-user__name { display: none; }
     .auth-card { padding: 1.5rem 1.25rem; }
 }
+
+/* Consent checkbox on the sign-up card */
+.auth-consent { display: flex; align-items: flex-start; gap: 0.6rem; font-size: 0.85rem; line-height: 1.4; cursor: pointer; }
+.auth-consent__box { margin-top: 0.2rem; flex-shrink: 0; }
+
+/* Retry button under a failed answer */
+.chat-retry { margin-top: 0.6rem; }

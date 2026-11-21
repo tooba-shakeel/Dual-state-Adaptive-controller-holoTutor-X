@@ -237,10 +237,10 @@ def bearer(token):
 
 @pytest.mark.asyncio
 async def test_routes_sign_up_login_me_logout(client):
-    r = await client.post("/api/auth/signup", json={"full_name": "Tooba", "email": "t@ned.edu", "password": "password1"})
+    r = await client.post("/api/auth/signup", json={"full_name": "Tooba", "email": "t@ned.edu", "password": "password1", "consent": True})
     assert r.status_code == 201 and r.json()["role"] == "student"
-    assert (await client.post("/api/auth/signup", json={"full_name": "X", "email": "t@ned.edu", "password": "password1"})).status_code == 409
-    assert (await client.post("/api/auth/signup", json={"full_name": "X", "email": "x@ned.edu", "password": "short"})).status_code == 422
+    assert (await client.post("/api/auth/signup", json={"full_name": "X", "email": "t@ned.edu", "password": "password1", "consent": True})).status_code == 409
+    assert (await client.post("/api/auth/signup", json={"full_name": "X", "email": "x@ned.edu", "password": "short", "consent": True})).status_code == 422
 
     assert (await client.post("/api/auth/login", json={"email": "t@ned.edu", "password": "nope-nope"})).status_code == 401
     token = (await client.post("/api/auth/login", json={"email": "t@ned.edu", "password": "password1"})).json()["token"]
@@ -252,7 +252,7 @@ async def test_routes_sign_up_login_me_logout(client):
 
 @pytest.mark.asyncio
 async def test_admin_routes_need_the_administrator_role(client):
-    await client.post("/api/auth/signup", json={"full_name": "Tooba", "email": "t@ned.edu", "password": "password1"})
+    await client.post("/api/auth/signup", json={"full_name": "Tooba", "email": "t@ned.edu", "password": "password1", "consent": True})
     student = (await client.post("/api/auth/login", json={"email": "t@ned.edu", "password": "password1"})).json()["token"]
     admin = (await client.post("/api/auth/login", json={"email": "admin@ned.edu", "password": "admin-pass-1"})).json()["token"]
 
@@ -268,3 +268,21 @@ async def test_admin_routes_need_the_administrator_role(client):
     r = await client.patch(f"/api/admin/users/{student_id}/status", headers=bearer(admin), json={"status": "disabled"})
     assert r.json()["status"] == "disabled"
     assert (await client.get("/api/auth/me", headers=bearer(student))).status_code == 401
+
+
+# ── Consent at sign up ───────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_sign_up_without_consent_is_rejected(client):
+    body = {"full_name": "Tooba", "email": "c@ned.edu", "password": "password1"}
+    assert (await client.post("/api/auth/signup", json=body)).status_code == 422
+    assert (await client.post("/api/auth/signup", json={**body, "consent": False})).status_code == 422
+    # no account was created
+    assert (await client.post("/api/auth/login", json={"email": "c@ned.edu", "password": "password1"})).status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_sign_up_with_consent_saves_it(client):
+    body = {"full_name": "Tooba", "email": "c@ned.edu", "password": "password1", "consent": True}
+    r = await client.post("/api/auth/signup", json=body)
+    assert r.status_code == 201 and r.json()["consent_given"] is True

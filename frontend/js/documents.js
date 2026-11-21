@@ -189,7 +189,10 @@ const Documents = (() => {
         contentDiv.innerHTML = '<div style="text-align:center;padding:2rem;"><span class="spinner"></span> Generating insight...</div>';
         
         try {
-            const res = await fetch(`/api/documents/${docId}/insights/${type}`);
+            const token = (typeof Auth !== 'undefined' && Auth.getToken) ? Auth.getToken() : null;
+            const res = await fetch(`/api/documents/${docId}/insights/${type}`, {
+                headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+            });
             if (!res.ok) throw new Error('Failed to load insight');
             const data = await res.json();
             
@@ -199,9 +202,15 @@ const Documents = (() => {
         }
     }
 
-    function exportInsights(docId, format) {
+    async function exportInsights(docId, format) {
         App.toast('Starting export...', 'info');
-        window.location.href = `/api/export/insights/${docId}/${format}`;
+        const extension = { pdf: 'pdf', word: 'docx', excel: 'xlsx' }[format] || format;
+        try {
+            await API.downloadFile(`/api/export/insights/${docId}/${format}`, `insights_${docId}.${extension}`);
+        } catch (err) {
+            console.error('Export error:', err);
+            App.toast(`Export failed: ${err.message}`, 'error');
+        }
     }
 
     // ── Helpers ─────────────────────────────────────────────────────
