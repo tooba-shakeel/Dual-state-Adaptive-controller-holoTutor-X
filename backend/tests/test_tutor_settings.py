@@ -126,7 +126,7 @@ async def token(client, email, password):
 
 @pytest.mark.asyncio
 async def test_routes_are_for_the_administrator_only(client):
-    await client.post("/api/auth/signup", json={"full_name": "S", "email": "s@ned.edu", "password": "password1"})
+    await client.post("/api/auth/signup", json={"full_name": "S", "email": "s@ned.edu", "password": "password1", "consent": True})
     student = {"Authorization": f"Bearer {await token(client, 's@ned.edu', 'password1')}"}
     admin = {"Authorization": f"Bearer {await token(client, 'admin@ned.edu', 'admin-pass-1')}"}
     path = "/api/admin/tutor-settings"

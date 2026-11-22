@@ -301,3 +301,46 @@ async def test_after_restart_an_unanswered_question_is_not_the_topic(mock_conver
 
     assert text == "Here is the answer."
     assert citations[0].text == "topic passage"
+
+
+# ── Conversation title ───────────────────────────────────────────────
+
+def test_make_title_is_short_and_one_line():
+    from app.services.chat_service import ChatService
+    assert ChatService._make_title("What is a chunk?") == "What is a chunk?"
+    assert ChatService._make_title("  line one\n line   two  ") == "line one line two"
+    long = ChatService._make_title("Explain how overlapping chunks help retrieval in a retrieval augmented system")
+    assert len(long) <= 41 and long.endswith("…")
+    assert ChatService._make_title("   ") == "New Conversation"
+
+
+@pytest.mark.asyncio
+async def test_conversation_store_update_title(tmp_path):
+    from app.storage.conversation_store import SQLiteConversationStore
+    store = SQLiteConversationStore(str(tmp_path / "c.db"))
+    await store.initialize()
+    conv = await store.create_conversation()
+    assert conv.title == "New Conversation"
+    await store.update_title(conv.id, "What is a chunk?")
+    assert (await store.get_conversation(conv.id)).title == "What is a chunk?"
+
+
+@pytest.mark.asyncio
+async def test_new_conversation_is_named_after_its_first_question(mock_conversation_store):
+    mock_conversation_store.create_conversation.return_value = Conversation(id="conv1", title="New Conversation")
+    mock_conversation_store.update_title = AsyncMock()
+    await run(make_service([cite(0.9)], mock_conversation_store, MockLLMProvider()), "What is a use case?")
+    mock_conversation_store.update_title.assert_awaited_once_with("conv1", "What is a use case?")
+
+
+@pytest.mark.asyncio
+async def test_later_questions_do_not_rename_the_conversation(mock_conversation_store):
+    mock_conversation_store.get_conversation.return_value = Conversation(
+        id="conv1", title="What is a use case?",
+        messages=[ChatMessage(role="user", content="What is a use case?")],
+    )
+    mock_conversation_store.update_title = AsyncMock()
+    service = make_service([cite(0.9)], mock_conversation_store, MockLLMProvider())
+    request = ChatRequest(message="And an actor?", conversation_id="conv1")
+    _ = [e async for e in service.chat_stream(request)]
+    mock_conversation_store.update_title.assert_not_awaited()

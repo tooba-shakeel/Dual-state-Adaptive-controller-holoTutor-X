@@ -164,7 +164,7 @@ async def login(client, email, password):
 async def test_log_routes_are_for_the_administrator_only(client):
     from app.dependencies import get_interaction_log
 
-    await client.post("/api/auth/signup", json={"full_name": "Sara", "email": "s@ned.edu", "password": "password1"})
+    await client.post("/api/auth/signup", json={"full_name": "Sara", "email": "s@ned.edu", "password": "password1", "consent": True})
     student = await login(client, "s@ned.edu", "password1")
     admin = await login(client, "admin@ned.edu", "admin-pass-1")
     me = (await client.get("/api/auth/me", headers=bearer(student))).json()

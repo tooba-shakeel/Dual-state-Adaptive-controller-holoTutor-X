@@ -194,6 +194,11 @@ class ConversationStore(ABC):
         ...
 
     @abstractmethod
+    async def update_title(self, conversation_id: str, title: str) -> None:
+        """Rename a conversation."""
+        ...
+
+    @abstractmethod
     async def delete_conversation(self, conversation_id: str) -> None:
         """Delete a conversation."""
         ...

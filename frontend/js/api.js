@@ -139,6 +139,13 @@ const API = (() => {
             buffer = parts.pop(); // last part might be incomplete
 
             for (const part of parts) {
+                // The server reports a failed answer as "event: error" (e.g. the AI wait limit)
+                if (part.startsWith('event: error')) {
+                    const line = part.split('\n').find(l => l.startsWith('data: '));
+                    let message = 'The answer could not be generated.';
+                    try { message = JSON.parse(line.slice(6)).error || message; } catch (_e) { /* keep default */ }
+                    throw new Error(message);
+                }
                 if (part.startsWith('data: ')) {
                     const dataStr = part.slice(6);
                     if (dataStr.trim() === '{}') continue;
@@ -155,6 +162,38 @@ const API = (() => {
         }
     }
 
+    // ── Download a file that needs the login token ──────────────────
+    // A plain link (window.location.href) cannot send "Authorization: Bearer <token>",
+    // so the file is fetched with the token and saved from a blob.
+    async function downloadFile(path, fallbackName = 'download') {
+        const res = await fetch(`${BASE_URL}${path}`, { headers: _authHeaders({}) });
+        if (!res.ok) {
+            _handleUnauthorized(res.status);
+            let message = 'Export failed';
+            try {
+                const body = await res.json();
+                const found = body.error || body.detail;
+                if (typeof found === 'string' && found) message = found;
+            } catch (_e) { /* no JSON body */ }
+            throw new Error(message);
+        }
+        // The file name comes from the server's Content-Disposition header
+        const disposition = res.headers.get('Content-Disposition') || '';
+        const match = /filename\*?=(?:UTF-8'')?"?([^";]+)"?/i.exec(disposition);
+        const filename = match ? decodeURIComponent(match[1]) : fallbackName;
+
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = filename;
+        link.style.display = 'none';
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }
+
     // ── Public API ──────────────────────────────────────────────────
 
     return {
@@ -166,6 +205,7 @@ const API = (() => {
         getChunks:      (id, limit = 100) =>
                             _request('GET', `/api/documents/${id}/chunks`, { params: { limit } }),
         uploadFiles,
+        downloadFile,
         chatStream,
         getConversations: () => _request('GET', '/api/conversations'),
         getConversation:  (id) => _request('GET', `/api/conversations/${id}`),

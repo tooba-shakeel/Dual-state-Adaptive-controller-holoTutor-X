@@ -70,13 +70,14 @@ class SQLiteUserStore:
     # ------------------------------------------------------------------
 
     async def create_user(
-        self, full_name: str, email: str, password_hash: str, role: str, now: datetime
+        self, full_name: str, email: str, password_hash: str, role: str, now: datetime,
+        consent_given: bool = False,
     ) -> dict[str, Any]:
         async with aiosqlite.connect(self._db_path) as db:
             cursor = await db.execute(
-                "INSERT INTO users (full_name, email, password_hash, role, created_at) "
-                "VALUES (?, ?, ?, ?, ?)",
-                (full_name, email, password_hash, role, now.isoformat()),
+                "INSERT INTO users (full_name, email, password_hash, role, consent_given, created_at) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                (full_name, email, password_hash, role, 1 if consent_given else 0, now.isoformat()),
             )
             await db.commit()
             user_id = cursor.lastrowid

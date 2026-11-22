@@ -11,7 +11,7 @@ from app.main import app
 
 
 async def student_token(ac, email):
-    await ac.post("/api/auth/signup", json={"full_name": "Student", "email": email, "password": "password1"})
+    await ac.post("/api/auth/signup", json={"full_name": "Student", "email": email, "password": "password1", "consent": True})
     r = await ac.post("/api/auth/login", json={"email": email, "password": "password1"})
     return r.json()["token"]
 

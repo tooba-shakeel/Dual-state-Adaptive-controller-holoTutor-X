@@ -147,6 +147,14 @@ class SQLiteConversationStore(ConversationStore):
             )
             await db.commit()
 
+    async def update_title(self, conversation_id: str, title: str) -> None:
+        async with aiosqlite.connect(self._db_path) as db:
+            await db.execute(
+                "UPDATE conversations SET title = ? WHERE id = ?",
+                (title, conversation_id),
+            )
+            await db.commit()
+
     async def delete_conversation(self, conversation_id: str) -> None:
         async with aiosqlite.connect(self._db_path) as db:
             # Foreign key cascade delete will remove messages

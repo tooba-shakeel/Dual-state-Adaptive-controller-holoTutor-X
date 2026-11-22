@@ -170,6 +170,10 @@ class ChatService:
             citations, key=lambda c: c.score or 0.0, reverse=True
         )
 
+        # Name a new conversation after its first question (instead of "New Conversation")
+        if not conv.messages and conv.title == "New Conversation":
+            await self._conversation_store.update_title(conv.id, self._make_title(request.message))
+
         # Save user message
         user_msg = ChatMessage(role="user", content=request.message)
         await self._conversation_store.add_message(conv.id, user_msg)
@@ -263,6 +267,14 @@ class ChatService:
         if inspect.isawaitable(result):
             result = await result
         return str(getattr(result, "value", result))
+
+    @staticmethod
+    def _make_title(message: str, max_length: int = 40) -> str:
+        """A short sidebar name from the first question: one line, cut at a word end."""
+        text = " ".join(message.split())
+        if len(text) <= max_length:
+            return text or "New Conversation"
+        return text[:max_length].rsplit(" ", 1)[0].rstrip(",.;:!?") + "…"
 
     @staticmethod
     def _is_follow_up(message: str) -> bool:

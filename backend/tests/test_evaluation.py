@@ -244,7 +244,7 @@ async def test_evaluation_routes_are_for_evaluators(client):
     admin = await token_of(client, "admin@ned.edu", "admin-pass-1")
     await client.post("/api/admin/evaluators", headers={"Authorization": f"Bearer {admin}"},
                       json={"full_name": "Eva", "email": "eva@ned.edu", "password": "password1"})
-    await client.post("/api/auth/signup", json={"full_name": "Sara", "email": "s@ned.edu", "password": "password1"})
+    await client.post("/api/auth/signup", json={"full_name": "Sara", "email": "s@ned.edu", "password": "password1", "consent": True})
     evaluator = {"Authorization": f"Bearer {await token_of(client, 'eva@ned.edu', 'password1')}"}
     student = {"Authorization": f"Bearer {await token_of(client, 's@ned.edu', 'password1')}"}
 
