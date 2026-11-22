@@ -1,212 +1,225 @@
-# AI Document Intelligence Platform
+# HoloTutor-X
 
-> Production-ready PDF analysis powered by RAG — upload, process, search, and extract intelligent insights from PDF documents.
+**A dual-state adaptive tutor for your own study material.**
 
-## Architecture
+HoloTutor-X answers questions from the PDFs a student uploads. Before it answers, it looks at two things:
+
+1. **Learner state:** how well the student understands, taken from their *Got it / Not sure / Confused* ratings.
+2. **Evidence confidence:** how strongly the uploaded material supports an answer, taken from the retrieval scores.
+
+The pair of states picks the **teaching action**: advance, simplify, give a worked example, ask the student to clarify, or say that the material does not cover the question. The tutor never answers from outside the uploaded material.
+
+> Built on [shubhProcoder/RAG](https://github.com/shubhProcoder/RAG) (MIT licence), a PDF question-answering app. HoloTutor-X adds the dual-state controller, user accounts, an administrator area and an evaluation screen.
+
+---
+
+## How a question is answered
 
 ```
-Frontend (SPA)  ──REST──▶  FastAPI  ──▶  Services  ──▶  ChromaDB + SQLite
-                                          │
-                                    PyMuPDF · Tesseract
-                                    pdfplumber · sentence-transformers
-                                    OpenAI GPT · InsightsService
+Student question
+      │
+      ▼
+Retriever ── searches the student's PDFs (ChromaDB, all-MiniLM-L6-v2)
+      │
+      ├──► Evidence Confidence Assessor (ECA) ──► Strong / Partial / Conflicting / Insufficient
+      │
+      ├──► Learner State Estimator (LSE) ───────► Understanding / Uncertain / Confused / Repeated failure
+      │
+      ▼
+Dual-State Controller (DSC) ── 4 × 4 decision table ──► teaching action
+      │
+      ▼
+Prompt builder + LLM ── answer with page citations and a check question
+      │
+      ▼
+Interaction log (for the administrator and the evaluation)
 ```
 
-| Layer | Tech | Purpose |
-|-------|------|---------|
-| **Frontend** | Vanilla HTML/CSS/JS | Upload UI, document manager, insights viewer, chat |
-| **API** | FastAPI + Uvicorn | REST endpoints, SSE streaming, middleware |
-| **PDF Engine** | PyMuPDF, pytesseract, pdfplumber | Text extraction, OCR, tables |
-| **Chunking** | Recursive splitter | Semantic text segmentation |
-| **Embeddings** | `all-MiniLM-L6-v2` | 384-dim dense vectors |
-| **Vector DB** | ChromaDB (persistent) | Similarity search |
-| **Metadata** | SQLite (aiosqlite) | Document state, insight caching |
-| **LLM** | OpenAI GPT-4o-mini | Chat, insight generation |
-| **Export** | reportlab, python-docx, openpyxl | PDF, Word, Excel export |
+### Evidence confidence (ECA)
+
+| State | Rule (default limits, changeable by the administrator) |
+|---|---|
+| **Insufficient** | No passage found, or the best score is below the partial limit (0.50) |
+| **Conflicting** | Two or more passages are above the partial limit and the LLM finds that they contradict each other |
+| **Strong** | The best score reaches the strong limit, and at least two passages are above the partial limit |
+| **Partial** | Anything else |
+
+### Learner state (LSE)
+
+Each rating is a signal: *Got it* = +1, *Not sure* = 0, *Confused* = −1.
+
+| State | Rule |
+|---|---|
+| **Repeated failure** | The last three signals are all −1 |
+| **Confused** | The latest signal is −1 |
+| **Understanding** | The latest signal is +1 and there is no −1 |
+| **Uncertain** | Anything else, including a new topic |
+
+### Decision table (DSC), default
+
+| Learner \ Evidence | Strong | Partial | Conflicting | Insufficient |
+|---|---|---|---|---|
+| **Understanding** | Advance | Clarify | Clarify | State uncertainty |
+| **Uncertain** | Worked example | Simplify | Clarify | State uncertainty |
+| **Confused** | Simplify | Simplify | Clarify | State uncertainty |
+| **Repeated failure** | Worked example | Worked example | State uncertainty | State uncertainty |
+
+The Insufficient column is always *State uncertainty*: the tutor does not guess. Clarify is never chosen twice in a row in one conversation.
+
+### Conversation rules
+
+- Answers end with a **check question**. When the student answers it, the tutor says whether the answer is correct, partly correct or wrong, and explains why from the material.
+- Replies that name no topic (*"explain again"*, *"general definition"*, *"because the customer is unsure"*) are searched together with the conversation's topic, and the search with the better score is used.
+- A message that ends with `?` or starts with *what, explain, define, describe, tell, give, list, compare* or *show* is treated as a new question.
+
+---
 
 ## Features
 
-### Document Intelligence
-- **Executive Summary** — concise overview of document content
-- **Key Insights** — top findings and takeaways
-- **Action Items** — extracted tasks and next steps
-- **Risks** — identified warnings and compliance concerns
-- **Recommendations** — proposals from the document
-- **KPIs & Metrics** — extracted performance indicators
-- **Important Dates** — deadlines and milestones
-- **Named Entities** — People, Organizations, Locations
-- **Financial Metrics** — revenue, costs, budget data
-- **Table Insights** — trends from tabular data
-- **Multi-document Comparison** — cross-document analysis
+**Student**
+- Sign up (with consent to store questions and ratings), log in, log out
+- Upload PDFs and chat with them; answers stream in with sources and page numbers
+- *Tutor State* panel under every answer, plus *Got it / Not sure / Confused* buttons
+- Conversation list with titles, retry for a failed answer, export of a chat as TXT
 
-### Document Management
-- Upload multiple PDF files (drag & drop)
-- View uploaded documents with processing status
-- Delete documents and all associated data
-- **Duplicate detection** — SHA-256 hash prevents re-indexing identical files
+**Administrator**
+- Users: list accounts, enable or disable them, create evaluator accounts
+- Tutor Settings: change the evidence limits and any cell of the decision table, with versions and reset
+- Logs: every interaction with its states and action, and a list of unanswered questions
 
-### RAG Chat
-- Semantic search over indexed documents
-- Streaming SSE responses
-- Conversation history
-- Citations with document name, page number, and source text
+**Evaluator**
+- Evaluation screen: run a question set (`scripts/test_questions.csv`) against the tutor and download the results
 
-### Export
-- Export insights as **PDF**, **Word (DOCX)**, or **Excel (XLSX)**
-- Export chat conversation history as **TXT**
+**Security**
+- Passwords of 8 to 64 characters, stored as hashes
+- Account lock after repeated failed logins, session timeout after inactivity
+- Each student sees only their own documents and conversations
 
-### Production Features
-- Structured logging with request IDs
-- Global exception handling with error mapping
-- Health checks (metadata store, vector store, embedding model, LLM)
-- Docker multi-stage build with non-root user
-- Unit tests and integration tests
-- CORS middleware, request timing
+---
 
-## Quick Start
+## Tech stack
 
-### Option 1: Docker (Recommended)
+| Layer | Technology |
+|---|---|
+| Frontend | HTML, CSS and plain JavaScript (single page) |
+| API | FastAPI + Uvicorn, server-sent events for streaming |
+| PDF text | PyMuPDF, pdfplumber (optional OCR with Tesseract) |
+| Embeddings | `sentence-transformers/all-MiniLM-L6-v2` |
+| Vector store | ChromaDB |
+| Data | SQLite: users, documents, conversations, interaction log |
+| LLM | Any OpenAI-compatible endpoint (we use Google Gemini) |
+| Tests | pytest (backend), Selenium (browser) |
+
+---
+
+## Running it on Windows
+
+**You need:** Python 3.11 and an API key for an OpenAI-compatible LLM (for example a Gemini key from Google AI Studio).
+
+### 1. Get the code
 
 ```bash
-cp .env.example .env
-# Edit .env to add your OPENAI_API_KEY
-cd docker
-docker compose up --build
+git clone https://github.com/tooba-shakeel/Dual-state-Adaptive-controller-holoTutor-X.git
 ```
 
-Open **http://localhost:8000** in your browser.
+```bash
+cd Dual-state-Adaptive-controller-holoTutor-X
+```
 
-### Option 2: Bare-Metal
-
-**Prerequisites:**
-- Python 3.11+
-- (Optional) Tesseract OCR for scanned PDFs
-- (Optional) Poppler for `pdf2image`
+### 2. Create the Python environment (first time only)
 
 ```bash
-# 1. Create virtual environment
-cd backend
 python -m venv .venv
-
-# Windows
-.venv\Scripts\activate
-
-# macOS/Linux
-source .venv/bin/activate
-
-# 2. Install dependencies
-pip install -r requirements.txt
-
-# 3. Configure
-cp ../.env.example ../.env
-# Edit .env to add your OPENAI_API_KEY
-
-# 4. Run
-uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 ```
-
-Open **http://localhost:8000** in your browser.
-
-## API Reference
-
-### Core Endpoints
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `GET` | `/api/health` | System health check |
-| `POST` | `/api/documents/upload` | Upload PDF files (multipart) |
-| `GET` | `/api/documents` | List all documents |
-| `GET` | `/api/documents/{id}` | Get document details |
-| `DELETE` | `/api/documents/{id}` | Delete document |
-| `GET` | `/api/documents/{id}/chunks` | Inspect document chunks |
-
-### Intelligence Endpoints
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `GET` | `/api/documents/{id}/insights/{type}` | Get/generate insight |
-| `POST` | `/api/documents/compare` | Compare multiple documents |
-
-**Insight types:** `executive_summary`, `key_insights`, `action_items`, `risks`, `recommendations`, `kpi_metrics`, `important_dates`, `named_entities`, `financial_metrics`, `table_insights`
-
-### Chat & Search
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `POST` | `/api/chat` | Chat with documents (SSE stream) |
-| `GET` | `/api/search?query=...` | Semantic search |
-| `GET` | `/api/conversations` | List conversations |
-| `POST` | `/api/conversations` | Create conversation |
-| `GET` | `/api/conversations/{id}` | Get conversation history |
-
-### Export
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `GET` | `/api/export/insights/{doc_id}/{format}` | Export insights (pdf/word/excel) |
-| `GET` | `/api/export/chat/{conv_id}/txt` | Export chat history |
-
-### Upload Example
 
 ```bash
-curl -X POST http://localhost:8000/api/documents/upload \
-  -F "files=@document.pdf"
+.venv\Scripts\pip install -r backend\requirements.txt
 ```
 
-### Generate Insight Example
+### 3. Create `.env` (first time only)
 
 ```bash
-curl http://localhost:8000/api/documents/{doc_id}/insights/executive_summary
+copy .env.example .env
 ```
 
-## Running Tests
+Open `.env` and fill in at least:
+
+| Setting | What to put |
+|---|---|
+| `OPENAI_API_KEY` | Your LLM API key |
+| `OPENAI_API_BASE` | e.g. `https://generativelanguage.googleapis.com/v1beta/openai/` |
+| `LLM_MODEL` | e.g. `gemini-2.5-flash` |
+| `ADMIN_NAME`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` | The administrator account, created on the first start |
+
+`.env` is in `.gitignore`. **Never commit it or share your key.**
+
+### 4. Start
+
+Double-click **`start_holotutor.bat`**. The browser opens at <http://localhost:8000> after about 20 seconds. Close the black window (or press Ctrl + C in it) to stop the server.
+
+### 5. First use
+
+1. Log in as the administrator, or sign up as a student.
+2. Upload a PDF on the **Documents** page and wait until it shows as ready.
+3. Ask a question on the **Chat** page.
+
+Uploaded PDFs, the database and the Tutor Settings are kept in `data/`, which is not in Git. A fresh copy starts empty, with the default limits.
+
+---
+
+## Tests
+
+Backend:
 
 ```bash
 cd backend
-pytest tests/ -v
 ```
 
-## Configuration
-
-All settings are configurable via environment variables (see `.env.example`):
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `OPENAI_API_KEY` | — | OpenAI API key (required for chat/insights) |
-| `LLM_MODEL` | `gpt-4o-mini` | LLM model for generation |
-| `MAX_FILE_SIZE_MB` | 50 | Maximum upload size |
-| `CHUNK_SIZE` | 1000 | Target chunk size (chars) |
-| `CHUNK_OVERLAP` | 200 | Overlap between chunks |
-| `EMBEDDING_MODEL` | `all-MiniLM-L6-v2` | Sentence-transformer model |
-| `TOP_K_RETRIEVAL` | 5 | Number of chunks to retrieve |
-| `SIMILARITY_THRESHOLD` | 0.5 | Distance threshold for filtering |
-| `OCR_ENABLED` | true | Enable Tesseract OCR |
-| `LOG_LEVEL` | INFO | Logging verbosity |
-
-## Project Structure
-
-```
-├── backend/app/
-│   ├── core/             # Domain models, interfaces, exceptions
-│   ├── services/         # PDF extraction, chunking, embeddings, insights, chat
-│   │   ├── insights_service.py   # Document intelligence generation
-│   │   ├── chat_service.py       # RAG chat orchestration
-│   │   └── ...
-│   ├── storage/          # ChromaDB + SQLite implementations
-│   ├── api/routes/       # REST endpoints
-│   │   ├── documents.py  # Upload, list, delete, insights
-│   │   ├── chat.py       # Chat + conversations
-│   │   ├── export.py     # PDF/Word/Excel/TXT export
-│   │   └── health.py     # Health checks
-│   ├── config.py         # Environment-based configuration
-│   ├── dependencies.py   # Dependency injection
-│   └── main.py           # FastAPI app factory
-├── backend/tests/        # Unit + integration tests
-├── frontend/             # Single-page UI
-├── docker/               # Containerization
-└── data/                 # Runtime data (gitignored)
+```bash
+..\.venv\Scripts\python -m pytest -q
 ```
 
-## License
+Browser tests (the server must be running): see `tests/selenium/`.
 
-MIT
+Evaluation from the command line: `scripts/evaluate.py` with `scripts/test_questions.csv`.
+
+---
+
+## Project layout
+
+```
+backend/
+  app/
+    api/routes/      auth, chat, documents, feedback, logs, tutor_settings, evaluation, export, health
+    services/        evidence_assessor (ECA), learner_state (LSE), decision_controller (DSC),
+                     prompt_builder, chat_service, retriever_service, auth_service, ...
+    storage/         SQLite and ChromaDB stores
+  tests/             pytest tests
+frontend/            index.html, css/, js/ (chat, documents, auth, admin, settings, logs, evaluation)
+scripts/             evaluate.py, test_questions.csv
+tests/selenium/      browser tests
+start_holotutor.bat  starts the server on Windows
+```
+
+---
+
+## Branches
+
+- `main`: the stable version. Clone and test this one.
+- `feature/integration`: where finished features are combined before they go to `main`.
+- `feature/...`: one branch per feature, merged into `feature/integration` with a pull request.
+
+When opening a pull request, check that the **base repository** is `tooba-shakeel/Dual-state-Adaptive-controller-holoTutor-X`, not the original `shubhProcoder/RAG`.
+
+---
+
+## Team
+
+- Tooba M. Shakeel
+- Ayesha Aziz
+- Sameen
+- Maryam
+
+## Licence and credit
+
+Based on [shubhProcoder/RAG](https://github.com/shubhProcoder/RAG), released under the MIT licence.
