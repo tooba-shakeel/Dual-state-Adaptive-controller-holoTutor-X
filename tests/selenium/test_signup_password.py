@@ -52,11 +52,17 @@ def fill(driver, element, text):
 def sign_up(driver, base_url, password):
     """Fill the Sign Up form and return ('accepted', '') or ('rejected', message)."""
     open_sign_up(driver, base_url)
-    name, email, pw, confirm = driver.find_elements(By.CSS_SELECTOR, ".auth-overlay .auth-form input")
+    name, email, pw, confirm = driver.find_elements(
+        By.CSS_SELECTOR, ".auth-overlay .auth-form input:not([type=checkbox])"
+    )
     fill(driver, name, "Selenium Student")
     fill(driver, email, f"selenium.{uuid.uuid4().hex[:8]}@test.local")
     fill(driver, pw, password)
     fill(driver, confirm, password)
+    # Sign up needs consent to store questions and ratings
+    consent = driver.find_element(By.CSS_SELECTOR, ".auth-overlay .auth-form input[type=checkbox]")
+    if not consent.is_selected():
+        consent.click()
     pause()
     driver.find_element(By.CSS_SELECTOR, ".auth-overlay .auth-submit").click()
 
