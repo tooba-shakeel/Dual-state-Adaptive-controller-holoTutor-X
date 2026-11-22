@@ -74,7 +74,8 @@ async def test_upload_creates_new_for_unique_file(mock_metadata_store, mock_vect
     )
 
     from app.config import settings
-    with patch.object(settings, 'upload_dir', tmp_path):
+    # upload_dir is a computed property, so point its base folder at tmp_path instead.
+    with patch.object(settings, 'DATA_DIR', str(tmp_path)):
         with patch.object(service, '_validate_file'):
             doc_id = await service.upload("test.pdf", b"unique content")
 
@@ -99,9 +100,10 @@ async def test_delete_document(mock_metadata_store, mock_vector_store, mock_pipe
     )
 
     from app.config import settings
-    with patch.object(settings, 'upload_dir', tmp_path):
+    # upload_dir is a computed property, so point its base folder at tmp_path instead.
+    with patch.object(settings, 'DATA_DIR', str(tmp_path)):
         # Create a dummy file
-        (tmp_path / "test.pdf").touch()
+        (settings.upload_dir / "test.pdf").touch()
         await service.delete_document("doc1")
 
     mock_vector_store.delete_by_document.assert_called_once_with("doc1")

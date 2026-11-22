@@ -8,6 +8,7 @@ getter functions used by API routes.
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 from typing import Any
 
 from app.config import settings
@@ -25,6 +26,15 @@ from app.services.retriever_service import RetrieverService
 from app.services.prompt_builder import PromptBuilder
 from app.services.chat_service import ChatService
 from app.services.insights_service import InsightsService
+from app.services.evidence_assessor import EvidenceAssessor
+from app.services.decision_controller import DecisionController
+from app.services.learner_state import LearnerStateEstimator
+from app.storage.signal_store import SQLiteSignalStore
+from app.storage.user_store import SQLiteUserStore
+from app.services.auth_service import AuthService
+from app.services.evaluation import EvaluationManager
+from app.storage.interaction_log_store import SQLiteInteractionLogStore
+from app.services.tutor_settings import TutorSettingsService
 
 logger = logging.getLogger(__name__)
 
@@ -37,18 +47,39 @@ _conversation_store: SQLiteConversationStore | None = None
 _llm_provider: OpenAILLMProvider | None = None
 _chat_service: ChatService | None = None
 _insights_service: InsightsService | None = None
+_auth_service: AuthService | None = None
+_evaluation_manager: EvaluationManager | None = None
+_interaction_log: SQLiteInteractionLogStore | None = None
+_tutor_settings: TutorSettingsService | None = None
 
 
 async def startup() -> None:
     """Initialise all singletons.  Called once from ``main.py``."""
     global _metadata_store, _vector_store, _embedder, _document_service
     global _conversation_store, _llm_provider, _chat_service, _insights_service
+    global _auth_service, _evaluation_manager, _interaction_log, _tutor_settings
 
     logger.info("Initialising services …")
 
     # Storage
     _metadata_store = SQLiteMetadataStore(str(settings.metadata_db_path))
     await _metadata_store.initialize()
+
+    # Accounts (UAM)
+    user_store = SQLiteUserStore(str(settings.metadata_db_path))
+    await user_store.initialize()
+    _auth_service = AuthService(
+        user_store,
+        token_idle_minutes=settings.TOKEN_IDLE_MINUTES,
+        max_failed_logins=settings.MAX_FAILED_LOGINS,
+        failed_login_window_minutes=settings.FAILED_LOGIN_WINDOW_MINUTES,
+        lock_minutes=settings.LOCK_MINUTES,
+        password_min_length=settings.PASSWORD_MIN_LENGTH,
+        password_max_length=settings.PASSWORD_MAX_LENGTH,
+    )
+    await _auth_service.ensure_administrator(
+        settings.ADMIN_NAME, settings.ADMIN_EMAIL, settings.ADMIN_PASSWORD
+    )
 
     _conversation_store = SQLiteConversationStore(str(settings.metadata_db_path))
     await _conversation_store.initialize()
@@ -66,6 +97,7 @@ async def startup() -> None:
         api_key=settings.OPENAI_API_KEY,
         model=settings.LLM_MODEL,
         base_url=settings.OPENAI_API_BASE,
+        timeout=settings.LLM_TIMEOUT_SECONDS,
     )
 
     # Services
@@ -98,17 +130,54 @@ async def startup() -> None:
     )
     prompt_builder = PromptBuilder()
 
+    # Dual-State tutoring
+    evidence_assessor = EvidenceAssessor(
+        llm=_llm_provider,
+        partial_limit=settings.PARTIAL_LIMIT,
+        strong_limit=settings.STRONG_LIMIT,
+    )
+    decision_controller = DecisionController.from_file(settings.DECISION_TABLE_PATH)
+
+    # Tutor Settings: the administrator's saved limits and table replace the defaults above
+    _tutor_settings = TutorSettingsService(
+        Path(settings.DATA_DIR) / "tutor_settings.json",
+        evidence_assessor,
+        decision_controller,
+        default_limits=(settings.PARTIAL_LIMIT, settings.STRONG_LIMIT),
+        default_cells=decision_controller.cells,
+    )
+    _tutor_settings.load()
+       # LSE: learner state from the student's last 3 rating signals (SRS 3.2.4)
+    learner_estimator = LearnerStateEstimator(SQLiteSignalStore(str(settings.metadata_db_path)))
+
+    # LOG: one row per question, read by the administrator's Logs / Unanswered screens
+    _interaction_log = SQLiteInteractionLogStore(str(settings.metadata_db_path))
+    await _interaction_log.initialize()
+
     _chat_service = ChatService(
         retriever=retriever,
         prompt_builder=prompt_builder,
         llm=_llm_provider,
         conversation_store=_conversation_store,
+        evidence_assessor=evidence_assessor,
+        learner_estimator=learner_estimator,
+        decision_controller=decision_controller,
+        top_k=settings.TOP_K_RETRIEVAL,
+        interaction_log=_interaction_log,
     )
 
     _insights_service = InsightsService(
         metadata_store=_metadata_store,
         llm=_llm_provider,
         vector_store=_vector_store,
+    )
+
+    # Evaluation mode (evaluator screen)
+    _evaluation_manager = EvaluationManager(
+        Path(settings.DATA_DIR) / "evaluation",
+        get_chat_service,
+        get_metadata_store,
+        top_k=settings.TOP_K_RETRIEVAL,
     )
 
     logger.info("All services initialised ✓")
@@ -121,6 +190,26 @@ async def shutdown() -> None:
 
 
 # ── Getters (used by routes) ─────────────────────────────────────────
+
+def get_auth_service() -> AuthService:
+    assert _auth_service is not None, "Auth service not initialised"
+    return _auth_service
+
+
+def get_evaluation_manager() -> EvaluationManager:
+    assert _evaluation_manager is not None, "Evaluation manager not initialised"
+    return _evaluation_manager
+
+
+def get_tutor_settings() -> TutorSettingsService:
+    assert _tutor_settings is not None, "Tutor settings not initialised"
+    return _tutor_settings
+
+
+def get_interaction_log() -> SQLiteInteractionLogStore:
+    assert _interaction_log is not None, "Interaction log not initialised"
+    return _interaction_log
+
 
 def get_metadata_store() -> SQLiteMetadataStore:
     assert _metadata_store is not None, "Metadata store not initialised"

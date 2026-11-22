@@ -18,8 +18,19 @@ logger = logging.getLogger(__name__)
 class OpenAILLMProvider(LLMProvider):
     """LLM Provider using the official OpenAI Python client."""
 
-    def __init__(self, api_key: str, model: str = "gpt-4o-mini", base_url: str | None = None) -> None:
-        self._client = AsyncOpenAI(api_key=api_key, base_url=base_url) if api_key else None
+    def __init__(
+        self,
+        api_key: str,
+        model: str = "gpt-4o-mini",
+        base_url: str | None = None,
+        timeout: float = 30.0,
+    ) -> None:
+        # Fail after `timeout` seconds instead of the client default of 10 minutes (SRS: AI WAIT LIMIT).
+        self._client = (
+            AsyncOpenAI(api_key=api_key, base_url=base_url, timeout=timeout, max_retries=1)
+            if api_key
+            else None
+        )
         self._model = model
         
         if not api_key:

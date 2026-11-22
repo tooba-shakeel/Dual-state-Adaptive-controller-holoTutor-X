@@ -1,0 +1,102 @@
+/* Administration screen (SRS 3.2.1). Uses inherited colours so it follows the app theme. */
+
+.admin-root [hidden] { display: none !important; }
+
+.admin-root { display: flex; flex-direction: column; gap: 1.25rem; }
+
+.admin-card {
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 16px;
+    padding: 1.25rem;
+}
+
+.admin-h3 { font-size: 1rem; font-weight: 600; margin: 0.75rem 0 0.5rem; }
+.admin-muted { font-size: 0.82rem; opacity: 0.7; margin: 0.25rem 0 0.5rem; }
+
+.admin-form {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+    gap: 0.9rem;
+    align-items: end;
+}
+.admin-field { display: flex; flex-direction: column; gap: 0.3rem; }
+.admin-field--button { justify-content: flex-end; }
+.admin-label { font-size: 0.82rem; font-weight: 600; opacity: 0.85; }
+
+.admin-input, .admin-select {
+    font: inherit;
+    color: inherit;
+    padding: 0.5rem 0.7rem;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.07);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    max-width: 100%;
+}
+.admin-input--sm, .admin-select { padding: 0.35rem 0.6rem; font-size: 0.85rem; }
+.admin-select option { color: #111827; }
+
+.admin-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
+
+.admin-error {
+    grid-column: 1 / -1;
+    margin: 0.5rem 0 0;
+    padding: 0.55rem 0.8rem;
+    border-radius: 10px;
+    font-size: 0.85rem;
+    background: rgba(239, 68, 68, 0.16);
+    border: 1px solid rgba(239, 68, 68, 0.45);
+}
+
+.admin-tablewrap { overflow-x: auto; }
+.admin-table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
+.admin-table th, .admin-table td {
+    text-align: left;
+    padding: 0.55rem 0.65rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    vertical-align: middle;
+}
+.admin-table th { font-weight: 600; opacity: 0.85; white-space: nowrap; }
+.admin-name { font-weight: 600; }
+.admin-you { font-weight: 400; opacity: 0.7; }
+.admin-cell-action { text-align: right; }
+
+.admin-badge {
+    display: inline-block;
+    padding: 0.1rem 0.6rem;
+    border-radius: 999px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    background: rgba(255, 255, 255, 0.12);
+}
+.admin-badge--active   { background: rgba(34, 197, 94, 0.28); }
+.admin-badge--disabled { background: rgba(239, 68, 68, 0.32); }
+
+/* Logs / Unanswered screen */
+.logs-filters { margin: 0.5rem 0; }
+.logs-gap { flex: 1; }
+.logs-date { display: flex; align-items: center; gap: 0.35rem; font-size: 0.82rem; opacity: 0.9; }
+.btn.logs-tab--on, .btn.logs-tab--on:hover, .btn.logs-tab--on:focus {
+    background: rgba(124, 58, 237, 0.45);
+    border-color: rgba(167, 139, 250, 0.7);
+}
+.logs-time { white-space: nowrap; font-size: 0.8rem; opacity: 0.8; }
+.logs-question { min-width: 16rem; max-width: 28rem; }
+.logs-pager { justify-content: flex-end; margin-top: 0.75rem; }
+.admin-table td .admin-badge { white-space: nowrap; }
+
+/* Tutor Settings screen */
+.settings-limits { display: grid; grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr)); gap: 1rem; }
+.settings-number { max-width: 8rem; }
+.settings-table th, .settings-table td { text-align: left; }
+.settings-rowhead { white-space: nowrap; }
+.settings-select { width: 100%; min-width: 9rem; }
+.settings-select:disabled { opacity: 0.6; cursor: not-allowed; }
+.settings-changed { border-color: rgba(250, 204, 21, 0.9) !important; box-shadow: 0 0 0 1px rgba(250, 204, 21, 0.6); }
+.settings-buttons { margin-top: 1rem; }
+.settings-buttons .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.settings-diff { font-size: 0.82rem; }
+
+@media (max-width: 640px) {
+    .admin-card { padding: 1rem; }
+}

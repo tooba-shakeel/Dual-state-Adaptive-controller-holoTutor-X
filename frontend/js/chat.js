@@ -135,8 +135,30 @@ class ChatComponent {
         this.scrollToBottom();
     }
     
-    async sendMessage() {
-        const text = this.inputField.value.trim();
+    // True when the "answer" is really an error message (e.g. the AI wait limit or a usage limit)
+    static isFailedAnswer(text) {
+        const t = String(text || '').trim();
+        return t.startsWith('Error:') || t.includes('[LLM Error:');
+    }
+
+    // Retry button under a failed answer: removes the failed pair and asks the same question again
+    appendRetryButton(msgDiv, userDiv, question) {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'btn btn--sm chat-retry';
+        btn.textContent = 'Retry';
+        btn.addEventListener('click', () => {
+            if (this.isGenerating) return;
+            userDiv.remove();
+            msgDiv.remove();
+            this.sendMessage(question);
+        });
+        msgDiv.appendChild(btn);
+        this.scrollToBottom();
+    }
+
+    async sendMessage(retryText) {
+        const text = (typeof retryText === 'string' ? retryText : this.inputField.value).trim();
         if (!text || this.isGenerating) return;
         
         // UI reset
@@ -145,14 +167,19 @@ class ChatComponent {
         this.isGenerating = true;
         
         // Add user message
-        this.appendMessage('user', text);
+        const { msgDiv: userDiv } = this.appendMessage('user', text);
         
         // Create empty assistant message for streaming
         const { msgDiv, contentDiv } = this.appendMessage('assistant', '<span class="status-dot status-dot--loading"></span> Thinking...');
         let fullResponse = '';
+        let answerTopic = null;
         
         try {
-            await API.chatStream(text, this.currentConversationId, (chunk, citations) => {
+            await API.chatStream(text, this.currentConversationId, (chunk, citations, data) => {
+                // Keep the conversation the server created, so follow-up questions share its history
+                if (data && data.conversation_id && !this.currentConversationId) {
+                    this.currentConversationId = data.conversation_id;
+                }
                 if (fullResponse === '') {
                     contentDiv.innerHTML = ''; // Clear loading
                 }
@@ -170,31 +197,157 @@ class ChatComponent {
                     this.appendCitations(msgDiv, citations);
                 }
                 
+                // First event also carries the Tutor State (learner state, evidence, action)
+                if (data && data.tutor_state && !msgDiv.querySelector('.tutor-state')) {
+                    answerTopic = data.topic || data.tutor_state.topic || null;
+                    this.appendTutorState(msgDiv, data.tutor_state);
+                }
+                
                 this.scrollToBottom();
             });
+            
+            // Rating buttons under the finished answer; a Retry button if the answer is an error
+            if (ChatComponent.isFailedAnswer(fullResponse)) {
+                this.appendRetryButton(msgDiv, userDiv, text);
+            } else if (fullResponse && this.currentConversationId) {
+                this.appendFeedbackButtons(msgDiv, this.currentConversationId, answerTopic);
+            }
             
             // Reload history to get new ID if it was created
             await this.loadConversations();
             
         } catch (e) {
             console.error('Chat error:', e);
-            contentDiv.innerHTML = `<span style="color:var(--danger)">Error: ${e.message}</span>`;
+            contentDiv.innerHTML = '';
+            const errorText = document.createElement('span');
+            errorText.style.color = 'var(--danger)';
+            errorText.textContent = `Error: ${e.message}`;
+            contentDiv.appendChild(errorText);
+            this.appendRetryButton(msgDiv, userDiv, text);
         } finally {
             this.isGenerating = false;
             this.inputField.focus();
         }
     }
     
+    // ── Tutor State panel + learner rating (LSE) ────────────────────
+
+    static prettyLabel(value) {
+        const text = String(value || '').replace(/_/g, ' ');
+        return text.charAt(0).toUpperCase() + text.slice(1);
+    }
+
+    static tone(value) {
+        if (['understanding', 'strong'].includes(value)) return 'good';
+        if (['uncertain', 'partial'].includes(value)) return 'warn';
+        if (['confused', 'repeated_failure', 'conflicting', 'insufficient'].includes(value)) return 'bad';
+        return 'neutral';
+    }
+
+    appendTutorState(msgDiv, tutorState) {
+        const panel = document.createElement('div');
+        panel.className = 'tutor-state';
+
+        const title = document.createElement('div');
+        title.className = 'tutor-state__title';
+        title.textContent = 'Tutor State';
+        panel.appendChild(title);
+
+        const row = document.createElement('div');
+        row.className = 'tutor-state__row';
+
+        let evidenceText = ChatComponent.prettyLabel(tutorState.evidence_state);
+        if (typeof tutorState.evidence_score === 'number') {
+            evidenceText += ` (${Math.round(tutorState.evidence_score * 100)}%)`;
+        }
+
+        const chips = [
+            ['Learner', ChatComponent.prettyLabel(tutorState.learner_state), ChatComponent.tone(tutorState.learner_state)],
+            ['Evidence', evidenceText, ChatComponent.tone(tutorState.evidence_state)],
+            ['Action', ChatComponent.prettyLabel(tutorState.teaching_action), 'neutral'],
+        ];
+        chips.forEach(([label, value, tone]) => {
+            const chip = document.createElement('span');
+            chip.className = `tutor-chip tutor-chip--${tone}`;
+            const l = document.createElement('span');
+            l.className = 'tutor-chip__label';
+            l.textContent = label;
+            const v = document.createElement('span');
+            v.className = 'tutor-chip__value';
+            v.textContent = value;
+            chip.appendChild(l);
+            chip.appendChild(v);
+            row.appendChild(chip);
+        });
+
+        panel.appendChild(row);
+        msgDiv.appendChild(panel);
+        this.scrollToBottom();
+    }
+
+    appendFeedbackButtons(msgDiv, conversationId, topic) {
+        const wrap = document.createElement('div');
+        wrap.className = 'feedback';
+
+        const prompt = document.createElement('span');
+        prompt.className = 'feedback__prompt';
+        prompt.textContent = 'Did you understand this?';
+        wrap.appendChild(prompt);
+
+        const buttons = [
+            { signal: 1,  label: 'Got it',   cls: 'feedback__btn--good' },
+            { signal: 0,  label: 'Not sure', cls: 'feedback__btn--warn' },
+            { signal: -1, label: 'Confused', cls: 'feedback__btn--bad' },
+        ];
+        const status = document.createElement('span');
+        status.className = 'feedback__status';
+
+        const btnEls = buttons.map(({ signal, label, cls }) => {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = `btn btn--sm feedback__btn ${cls}`;
+            btn.textContent = label;
+            btn.addEventListener('click', async () => {
+                btnEls.forEach(b => { b.disabled = true; });
+                btn.classList.add('feedback__btn--selected');
+                status.textContent = 'Saving…';
+                try {
+                    const res = await API.sendFeedback(conversationId, signal, topic);
+                    status.textContent = res && res.learner_state
+                        ? `Noted. Your level is now: ${ChatComponent.prettyLabel(res.learner_state)}. The next answer will adapt.`
+                        : 'Noted.';
+                } catch (e) {
+                    console.error('Feedback error:', e);
+                    status.textContent = 'Could not save your rating. Try again.';
+                    btn.classList.remove('feedback__btn--selected');
+                    btnEls.forEach(b => { b.disabled = false; });
+                    if (typeof App !== 'undefined' && App.toast) App.toast('Could not save your rating', 'error');
+                }
+            });
+            wrap.appendChild(btn);
+            return btn;
+        });
+
+        wrap.appendChild(status);
+        msgDiv.appendChild(wrap);
+        this.scrollToBottom();
+    }
+    
     scrollToBottom() {
         this.messagesContainer.scrollTop = this.messagesContainer.scrollHeight;
     }
     
-    exportConversation() {
+    async exportConversation() {
         if (!this.currentConversationId) {
             App.toast('No conversation selected', 'error');
             return;
         }
         App.toast('Starting export...', 'info');
-        window.location.href = `/api/export/chat/${this.currentConversationId}/txt`;
+        try {
+            await API.downloadFile(`/api/export/chat/${this.currentConversationId}/txt`, 'chat.txt');
+        } catch (e) {
+            console.error('Export error:', e);
+            App.toast(`Export failed: ${e.message}`, 'error');
+        }
     }
 }

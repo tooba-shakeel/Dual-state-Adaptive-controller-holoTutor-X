@@ -9,11 +9,22 @@ const App = (() => {
     let chatComponent = null;
 
     async function init() {
+        // Login first (SRS 3.2.1): the rest of the app starts after a valid login.
+        if (typeof Auth !== 'undefined') await Auth.ensureLoggedIn();
+
         Upload.init(_onUploadComplete);
         Documents.init();
         
         chatComponent = new ChatComponent();
-        
+
+        // Administration screen (only for administrators; SRS 3.2.1)
+        if (typeof Admin !== 'undefined') Admin.init();
+        // Logs / Unanswered screen (only for administrators; SRS LOG module)
+        if (typeof Logs !== 'undefined') Logs.init();
+        if (typeof Evaluation !== 'undefined') Evaluation.init();
+        // Tutor Settings screen (only for administrators; SRS 3.2.5, 3.2.6)
+        if (typeof TutorSettings !== 'undefined') TutorSettings.init();
+
         _initTabs();
 
         // Initial data load

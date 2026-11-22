@@ -64,7 +64,13 @@ class SQLiteMetadataStore(MetadataStore):
                 await db.execute("ALTER TABLE documents ADD COLUMN file_hash TEXT")
             except aiosqlite.OperationalError:
                 pass
-                
+
+            # Owner of the document (SRS 3.2.2: each student sees only their own documents)
+            try:
+                await db.execute("ALTER TABLE documents ADD COLUMN user_id INTEGER")
+            except aiosqlite.OperationalError:
+                pass
+
             await db.commit()
         self._initialized = True
         logger.info("SQLite metadata store initialised at %s", self._db_path)
@@ -79,8 +85,8 @@ class SQLiteMetadataStore(MetadataStore):
                 """
                 INSERT OR REPLACE INTO documents
                     (id, filename, original_name, file_hash, file_size, upload_time,
-                     status, page_count, chunk_count, error_message)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     status, page_count, chunk_count, error_message, user_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     document.id,
@@ -93,6 +99,7 @@ class SQLiteMetadataStore(MetadataStore):
                     document.page_count,
                     document.chunk_count,
                     document.error_message,
+                    document.user_id,
                 ),
             )
             await db.commit()
@@ -109,20 +116,21 @@ class SQLiteMetadataStore(MetadataStore):
             return self._row_to_document(row)
 
     async def list_documents(
-        self, limit: int = 50, offset: int = 0
+        self, limit: int = 50, offset: int = 0, user_id: int | None = None
     ) -> tuple[list[Document], int]:
+        where, params = ("WHERE user_id = ?", (user_id,)) if user_id is not None else ("", ())
         async with aiosqlite.connect(self._db_path) as db:
             db.row_factory = aiosqlite.Row
 
             # Total count
-            cursor = await db.execute("SELECT COUNT(*) as cnt FROM documents")
+            cursor = await db.execute(f"SELECT COUNT(*) as cnt FROM documents {where}", params)
             total_row = await cursor.fetchone()
             total = total_row["cnt"] if total_row else 0
 
             # Paginated results
             cursor = await db.execute(
-                "SELECT * FROM documents ORDER BY upload_time DESC LIMIT ? OFFSET ?",
-                (limit, offset),
+                f"SELECT * FROM documents {where} ORDER BY upload_time DESC LIMIT ? OFFSET ?",
+                (*params, limit, offset),
             )
             rows = await cursor.fetchall()
             documents = [self._row_to_document(r) for r in rows]
@@ -163,12 +171,17 @@ class SQLiteMetadataStore(MetadataStore):
             await db.execute("DELETE FROM documents WHERE id = ?", (document_id,))
             await db.commit()
 
-    async def get_document_by_hash(self, file_hash: str) -> Document | None:
+    async def get_document_by_hash(self, file_hash: str, user_id: int | None = None) -> Document | None:
         async with aiosqlite.connect(self._db_path) as db:
             db.row_factory = aiosqlite.Row
-            cursor = await db.execute(
-                "SELECT * FROM documents WHERE file_hash = ?", (file_hash,)
-            )
+            if user_id is None:
+                cursor = await db.execute(
+                    "SELECT * FROM documents WHERE file_hash = ?", (file_hash,)
+                )
+            else:  # the same PDF uploaded by another student is a separate document
+                cursor = await db.execute(
+                    "SELECT * FROM documents WHERE file_hash = ? AND user_id = ?", (file_hash, user_id)
+                )
             row = await cursor.fetchone()
             if row is None:
                 return None
@@ -219,6 +232,7 @@ class SQLiteMetadataStore(MetadataStore):
     @staticmethod
     def _row_to_document(row: aiosqlite.Row) -> Document:
         file_hash = row["file_hash"] if "file_hash" in row.keys() else None
+        user_id = row["user_id"] if "user_id" in row.keys() else None
         return Document(
             id=row["id"],
             filename=row["filename"],
@@ -230,4 +244,5 @@ class SQLiteMetadataStore(MetadataStore):
             page_count=row["page_count"],
             chunk_count=row["chunk_count"],
             error_message=row["error_message"],
+            user_id=user_id,
         )

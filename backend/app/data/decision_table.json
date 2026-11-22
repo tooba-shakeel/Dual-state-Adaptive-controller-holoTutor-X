@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "cells": {
+    "understanding": {
+      "strong": "advance",
+      "partial": "clarify",
+      "conflicting": "clarify",
+      "insufficient": "state_uncertainty"
+    },
+    "uncertain": {
+      "strong": "worked_example",
+      "partial": "simplify",
+      "conflicting": "clarify",
+      "insufficient": "state_uncertainty"
+    },
+    "confused": {
+      "strong": "simplify",
+      "partial": "simplify",
+      "conflicting": "clarify",
+      "insufficient": "state_uncertainty"
+    },
+    "repeated_failure": {
+      "strong": "worked_example",
+      "partial": "worked_example",
+      "conflicting": "state_uncertainty",
+      "insufficient": "state_uncertainty"
+    }
+  }
+}

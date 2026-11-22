@@ -59,6 +59,37 @@ class ValidationError(AppError):
         )
 
 
+class AuthenticationError(AppError):
+    """Raised when login fails or a token is missing, wrong or expired (one general message)."""
+
+    def __init__(self, message: str = "Invalid email or password"):
+        super().__init__(message=message)
+
+
+class AccountLockedError(AppError):
+    """Raised when an account is locked after too many wrong passwords."""
+
+    def __init__(self, minutes: int):
+        super().__init__(
+            message="Too many wrong attempts. Try again later.",
+            detail=f"The account is locked for {minutes} minutes.",
+        )
+
+
+class PermissionDeniedError(AppError):
+    """Raised when a logged-in user calls a function of another role."""
+
+    def __init__(self):
+        super().__init__(message="You do not have permission to do this")
+
+
+class ConflictError(AppError):
+    """Raised when a record already exists, e.g. an e-mail already in use."""
+
+    def __init__(self, message: str):
+        super().__init__(message=message)
+
+
 class ProcessingError(AppError):
     """Raised when the processing pipeline encounters an unrecoverable error."""
 

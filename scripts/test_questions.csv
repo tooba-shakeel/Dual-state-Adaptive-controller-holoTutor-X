@@ -1,0 +1,31 @@
+id,question,answerable,reference_page,learner_state
+Q01,What are the three types of software process models listed in the lecture?,yes,3,understanding
+Q02,What does the requirements analysis and definition stage of the waterfall model establish?,yes,4,uncertain
+Q03,What is the capital of France?,no,,confused
+Q04,What happens in the system and software design stage of the waterfall model?,yes,5,repeated_failure
+Q05,What is unit testing in the waterfall model?,yes,6,understanding
+Q06,How many sprints are in a typical Scrum project?,no,,uncertain
+Q07,What happens during the operation and maintenance stage of the waterfall model?,yes,7,confused
+Q08,What problems are encountered when the waterfall model is applied?,yes,8,repeated_failure
+Q09,What is the V-model and how does it relate testing to design?,no,,understanding
+Q10,When should the waterfall model be used?,yes,8,uncertain
+Q11,What is the idea behind evolutionary development?,yes,9,confused
+Q12,What are the phases of Rapid Application Development?,no,,repeated_failure
+Q13,What are the two fundamental types of evolutionary development?,yes,10,understanding
+Q14,"How does the prototyping paradigm begin, and what does the quick design focus on?",yes,11,uncertain
+Q15,Who invented the waterfall model?,no,,confused
+Q16,What is component-based software engineering (CBSE)?,yes,12,repeated_failure
+Q17,What are the stages of a reuse-oriented process in component-based software engineering?,yes,12,understanding
+Q18,What is Extreme Programming and what are its core practices?,no,,uncertain
+Q19,What are the advantages and disadvantages of component-based software engineering?,yes,13,confused
+Q20,What does process iteration mean?,yes,15,repeated_failure
+Q21,Explain how Kubernetes schedules containers.,no,,understanding
+Q22,Why does iteration conflict with the procurement model of many organizations?,yes,16,uncertain
+Q23,What is the first increment in incremental delivery usually?,yes,19,confused
+Q24,What is the cost estimation formula in COCOMO?,no,,repeated_failure
+Q25,What are the advantages of the incremental approach?,yes,20,understanding
+Q26,What are the problems with the incremental approach?,yes,21,uncertain
+Q27,What is the Rational Unified Process?,no,,confused
+Q28,What are the four sectors of each loop in the spiral model?,yes,24,repeated_failure
+Q29,What are the drawbacks of the spiral model?,yes,25,understanding
+Q30,What is the maximum number of people recommended in an agile team?,no,,uncertain

@@ -58,7 +58,76 @@
     /* Transitions */
     --ease: cubic-bezier(0.4, 0, 0.2, 1);
     --duration: 200ms;
+
+    /* Aliases used by the chat styles */
+    --primary:       var(--accent-1);
+    --primary-hover: #4f52d6;
+    --border-light:  var(--border);
+    --border-color:  var(--border);
+    --text-tertiary: var(--text-muted);
+    --header-height: 72px;
 }
+
+/* ── Tutor State panel & learner rating (LSE) ───────────────────── */
+.tutor-state {
+    margin-top: 0.75rem;
+    padding: 0.6rem 0.75rem;
+    background: rgba(99, 102, 241, 0.06);
+    border: 1px solid rgba(99, 102, 241, 0.22);
+    border-radius: var(--radius-md);
+}
+
+.tutor-state__title {
+    font-size: 0.68rem; font-weight: 700;
+    letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 0.4rem;
+}
+
+.tutor-state__row { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+
+.tutor-chip {
+    display: inline-flex; align-items: center; gap: 0.4rem;
+    padding: 3px 10px;
+    border-radius: 99px;
+    font-size: 0.76rem;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--border);
+}
+
+.tutor-chip__label { color: var(--text-muted); font-weight: 500; }
+.tutor-chip__value { color: var(--text-primary); font-weight: 600; }
+
+.tutor-chip--good    { border-color: rgba(16, 185, 129, 0.45); }
+.tutor-chip--good .tutor-chip__value    { color: var(--status-completed); }
+.tutor-chip--warn    { border-color: rgba(245, 158, 11, 0.45); }
+.tutor-chip--warn .tutor-chip__value    { color: var(--status-pending); }
+.tutor-chip--bad     { border-color: rgba(239, 68, 68, 0.45); }
+.tutor-chip--bad .tutor-chip__value     { color: var(--status-failed); }
+.tutor-chip--neutral { border-color: rgba(99, 102, 241, 0.45); }
+.tutor-chip--neutral .tutor-chip__value { color: var(--accent-1); }
+
+.feedback {
+    margin-top: 0.6rem;
+    display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem;
+}
+
+.feedback__prompt { font-size: 0.8rem; color: var(--text-secondary); }
+
+.feedback__btn { border-radius: 99px; }
+.feedback__btn:disabled { opacity: 0.55; cursor: default; }
+.feedback__btn--good:hover:not(:disabled) { border-color: var(--status-completed); color: var(--status-completed); }
+.feedback__btn--warn:hover:not(:disabled) { border-color: var(--status-pending);   color: var(--status-pending); }
+.feedback__btn--bad:hover:not(:disabled)  { border-color: var(--status-failed);    color: var(--status-failed); }
+
+.feedback__btn--selected,
+.feedback__btn--selected:disabled {
+    opacity: 1;
+    background: var(--bg-hover);
+    border-color: var(--accent-1);
+}
+
+.feedback__status { font-size: 0.78rem; color: var(--text-muted); }
 
 html { scroll-behavior: smooth; }
 
@@ -449,7 +518,9 @@ body {
     border-bottom: 1px solid var(--border);
 }
 
-.modal__title { font-size: 1.05rem; font-weight: 600; /* ==========================================================================
+.modal__title { font-size: 1.05rem; font-weight: 600; }
+
+/* ==========================================================================
    Chat Layout & Styles
    ========================================================================== */
 

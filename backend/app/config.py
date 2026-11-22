@@ -73,15 +73,37 @@ class Settings(BaseSettings):
     LOG_LEVEL: str = "INFO"
 
     # ── App metadata ─────────────────────────────────────────────────────
-    APP_NAME: str = "PDF RAG System"
+    APP_NAME: str = "HoloTutor-X System"
     APP_VERSION: str = "0.1.0"
 
     # ── LLM / RAG ────────────────────────────────────────────────────────
     OPENAI_API_KEY: str = ""
     OPENAI_API_BASE: str | None = None
     LLM_MODEL: str = "gpt-4o-mini"
+    LLM_TIMEOUT_SECONDS: float = 30.0  # SRS: AI WAIT LIMIT
     TOP_K_RETRIEVAL: int = 5
-    SIMILARITY_THRESHOLD: float = 0.5  # Ignore chunks with distance above this
+    # Keep every top-k chunk (cosine distance is 0..2) so the ECA module sees all scores.
+    SIMILARITY_THRESHOLD: float = 2.0  # Ignore chunks with distance above this
+
+    # ── Dual-State tutoring (SRS 3.2.5 and 3.2.6) ────────────────────────
+    PARTIAL_LIMIT: float = 0.50  # best score below this -> Insufficient
+    STRONG_LIMIT: float = 0.75  # best score for Strong (with 2+ passages above PARTIAL_LIMIT)
+    DECISION_TABLE_PATH: str = str(Path(__file__).resolve().parent / "data" / "decision_table.json")
+
+    # ── Accounts (SRS 3.2.1, UAM) ────────────────────────────────────────
+    PASSWORD_MIN_LENGTH: int = 8
+    PASSWORD_MAX_LENGTH: int = 64
+    TOKEN_IDLE_MINUTES: int = 30  # login token stops working after this much inactivity
+    MAX_FAILED_LOGINS: int = 5  # wrong passwords allowed within the window below
+    FAILED_LOGIN_WINDOW_MINUTES: int = 10
+    LOCK_MINUTES: int = 5
+    # The administrator account is created at install time from these (set them in .env).
+    ADMIN_NAME: str = "Administrator"
+    ADMIN_EMAIL: str = ""
+    ADMIN_PASSWORD: str = ""
+
+    # ── Evaluation mode (SRS 3.2.9) ──────────────────────────────────────
+    EVALUATION_DELAY_SECONDS: float = 5.0  # minimum gap between AI calls during a run
 
 # Singleton — import this everywhere instead of constructing a new instance.
 settings = Settings()
